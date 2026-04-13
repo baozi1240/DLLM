@@ -1,5 +1,0 @@
-Batch run started at Mon Apr 13 04:34:46 PM CST 2026
-Python script: analyse.py
-Model path: /DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base
-Prompts file: prompts_50.txt
-============================================================
