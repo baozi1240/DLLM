@@ -1,0 +1,512 @@
+{"global_step": 0, "block_id": 0, "inner_step": 0, "curr_pos": 7, "curr_confidence": 0.76171875, "hit": null, "prev_pos": null, "prev_topk_positions": null}
+{"global_step": 1, "block_id": 0, "inner_step": 1, "curr_pos": 8, "curr_confidence": 0.466796875, "hit": 1, "prev_pos": 7, "prev_topk_positions": [10, 8, 9, 12, 22, 32, 47, 11]}
+{"global_step": 2, "block_id": 0, "inner_step": 2, "curr_pos": 11, "curr_confidence": 0.84375, "hit": 1, "prev_pos": 8, "prev_topk_positions": [9, 10, 13, 12, 11, 22, 16, 15]}
+{"global_step": 3, "block_id": 0, "inner_step": 3, "curr_pos": 9, "curr_confidence": 1.0, "hit": 1, "prev_pos": 11, "prev_topk_positions": [10, 12, 16, 9, 15, 17, 13, 14]}
+{"global_step": 4, "block_id": 0, "inner_step": 4, "curr_pos": 10, "curr_confidence": 1.0, "hit": 1, "prev_pos": 9, "prev_topk_positions": [10, 14, 12, 13, 15, 69, 17, 18]}
+{"global_step": 5, "block_id": 0, "inner_step": 5, "curr_pos": 12, "curr_confidence": 0.8125, "hit": 1, "prev_pos": 10, "prev_topk_positions": [12, 15, 14, 13, 16, 18, 40, 21]}
+{"global_step": 6, "block_id": 0, "inner_step": 6, "curr_pos": 13, "curr_confidence": 0.46875, "hit": 1, "prev_pos": 12, "prev_topk_positions": [16, 13, 15, 17, 14, 42, 18, 22]}
+{"global_step": 7, "block_id": 0, "inner_step": 7, "curr_pos": 14, "curr_confidence": 0.80078125, "hit": 1, "prev_pos": 13, "prev_topk_positions": [14, 16, 17, 25, 15, 18, 20, 19]}
+{"global_step": 8, "block_id": 0, "inner_step": 8, "curr_pos": 15, "curr_confidence": 0.453125, "hit": 1, "prev_pos": 14, "prev_topk_positions": [16, 15, 17, 18, 19, 20, 25, 21]}
+{"global_step": 9, "block_id": 0, "inner_step": 9, "curr_pos": 16, "curr_confidence": 0.71875, "hit": 1, "prev_pos": 15, "prev_topk_positions": [16, 17, 18, 19, 20, 21, 25, 26]}
+{"global_step": 10, "block_id": 0, "inner_step": 10, "curr_pos": 18, "curr_confidence": 0.87890625, "hit": 1, "prev_pos": 16, "prev_topk_positions": [17, 19, 18, 20, 21, 25, 22, 24]}
+{"global_step": 11, "block_id": 0, "inner_step": 11, "curr_pos": 17, "curr_confidence": 1.0, "hit": 1, "prev_pos": 18, "prev_topk_positions": [17, 19, 21, 22, 20, 23, 24, 28]}
+{"global_step": 12, "block_id": 0, "inner_step": 12, "curr_pos": 19, "curr_confidence": 0.66015625, "hit": 1, "prev_pos": 17, "prev_topk_positions": [26, 24, 25, 20, 21, 19, 22, 28]}
+{"global_step": 13, "block_id": 0, "inner_step": 13, "curr_pos": 20, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 19, "prev_topk_positions": [20, 21, 22, 24, 23, 26, 27, 25]}
+{"global_step": 14, "block_id": 0, "inner_step": 14, "curr_pos": 21, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 20, "prev_topk_positions": [22, 24, 21, 25, 23, 26, 27, 28]}
+{"global_step": 15, "block_id": 0, "inner_step": 15, "curr_pos": 22, "curr_confidence": 0.9609375, "hit": 1, "prev_pos": 21, "prev_topk_positions": [22, 27, 26, 24, 25, 23, 28, 29]}
+{"global_step": 16, "block_id": 0, "inner_step": 16, "curr_pos": 23, "curr_confidence": 0.6328125, "hit": 1, "prev_pos": 22, "prev_topk_positions": [23, 24, 25, 26, 31, 27, 29, 28]}
+{"global_step": 17, "block_id": 0, "inner_step": 17, "curr_pos": 24, "curr_confidence": 0.8515625, "hit": 1, "prev_pos": 23, "prev_topk_positions": [24, 25, 26, 31, 27, 28, 29, 30]}
+{"global_step": 18, "block_id": 0, "inner_step": 18, "curr_pos": 25, "curr_confidence": 0.85546875, "hit": 1, "prev_pos": 24, "prev_topk_positions": [25, 26, 27, 28, 29, 30, 31, 33]}
+{"global_step": 19, "block_id": 0, "inner_step": 19, "curr_pos": 26, "curr_confidence": 0.7265625, "hit": 1, "prev_pos": 25, "prev_topk_positions": [28, 30, 26, 29, 31, 27, 33, 32]}
+{"global_step": 20, "block_id": 0, "inner_step": 20, "curr_pos": 27, "curr_confidence": 0.61328125, "hit": 1, "prev_pos": 26, "prev_topk_positions": [28, 27, 29, 30, 31, 32, 33, 34]}
+{"global_step": 21, "block_id": 0, "inner_step": 21, "curr_pos": 28, "curr_confidence": 0.578125, "hit": 1, "prev_pos": 27, "prev_topk_positions": [28, 29, 30, 31, 33, 32, 34, 55]}
+{"global_step": 22, "block_id": 0, "inner_step": 22, "curr_pos": 29, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 28, "prev_topk_positions": [30, 29, 31, 32, 33, 34, 35, 38]}
+{"global_step": 23, "block_id": 0, "inner_step": 23, "curr_pos": 31, "curr_confidence": 0.51953125, "hit": 1, "prev_pos": 29, "prev_topk_positions": [31, 30, 32, 33, 34, 35, 38, 36]}
+{"global_step": 24, "block_id": 0, "inner_step": 24, "curr_pos": 30, "curr_confidence": 0.953125, "hit": 1, "prev_pos": 31, "prev_topk_positions": [30, 32, 33, 35, 34, 36, 38, 42]}
+{"global_step": 25, "block_id": 0, "inner_step": 25, "curr_pos": 32, "curr_confidence": 0.37890625, "hit": 1, "prev_pos": 30, "prev_topk_positions": [35, 33, 34, 32, 36, 40, 42, 39]}
+{"global_step": 26, "block_id": 0, "inner_step": 26, "curr_pos": 33, "curr_confidence": 0.7734375, "hit": 1, "prev_pos": 32, "prev_topk_positions": [33, 34, 35, 36, 40, 39, 37, 38]}
+{"global_step": 27, "block_id": 0, "inner_step": 27, "curr_pos": 34, "curr_confidence": 0.41796875, "hit": 1, "prev_pos": 33, "prev_topk_positions": [34, 35, 36, 40, 37, 39, 38, 48]}
+{"global_step": 28, "block_id": 0, "inner_step": 28, "curr_pos": 35, "curr_confidence": 0.484375, "hit": 1, "prev_pos": 34, "prev_topk_positions": [35, 37, 39, 38, 36, 40, 41, 42]}
+{"global_step": 29, "block_id": 0, "inner_step": 29, "curr_pos": 36, "curr_confidence": 0.88671875, "hit": 1, "prev_pos": 35, "prev_topk_positions": [37, 36, 39, 38, 40, 42, 41, 55]}
+{"global_step": 30, "block_id": 0, "inner_step": 30, "curr_pos": 37, "curr_confidence": 0.89453125, "hit": 1, "prev_pos": 36, "prev_topk_positions": [37, 38, 40, 39, 41, 42, 55, 48]}
+{"global_step": 31, "block_id": 0, "inner_step": 31, "curr_pos": 39, "curr_confidence": 0.96875, "hit": 1, "prev_pos": 37, "prev_topk_positions": [40, 38, 41, 39, 42, 43, 46, 52]}
+{"global_step": 32, "block_id": 0, "inner_step": 32, "curr_pos": 38, "curr_confidence": 0.87109375, "hit": 1, "prev_pos": 39, "prev_topk_positions": [38, 40, 41, 42, 43, 47, 52, 50]}
+{"global_step": 33, "block_id": 0, "inner_step": 33, "curr_pos": 40, "curr_confidence": 0.64453125, "hit": 1, "prev_pos": 38, "prev_topk_positions": [40, 41, 42, 55, 43, 46, 57, 59]}
+{"global_step": 34, "block_id": 0, "inner_step": 34, "curr_pos": 41, "curr_confidence": 0.48828125, "hit": 1, "prev_pos": 40, "prev_topk_positions": [41, 42, 43, 45, 46, 44, 48, 50]}
+{"global_step": 35, "block_id": 0, "inner_step": 35, "curr_pos": 42, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 41, "prev_topk_positions": [42, 43, 46, 47, 45, 44, 55, 57]}
+{"global_step": 36, "block_id": 0, "inner_step": 36, "curr_pos": 44, "curr_confidence": 0.58203125, "hit": 1, "prev_pos": 42, "prev_topk_positions": [43, 45, 47, 59, 46, 48, 44, 55]}
+{"global_step": 37, "block_id": 0, "inner_step": 37, "curr_pos": 43, "curr_confidence": 0.96484375, "hit": 1, "prev_pos": 44, "prev_topk_positions": [43, 45, 46, 47, 48, 50, 49, 55]}
+{"global_step": 38, "block_id": 0, "inner_step": 38, "curr_pos": 45, "curr_confidence": 0.50390625, "hit": 1, "prev_pos": 43, "prev_topk_positions": [46, 47, 45, 48, 49, 55, 53, 50]}
+{"global_step": 39, "block_id": 0, "inner_step": 39, "curr_pos": 46, "curr_confidence": 0.4609375, "hit": 1, "prev_pos": 45, "prev_topk_positions": [46, 49, 47, 50, 48, 51, 55, 57]}
+{"global_step": 40, "block_id": 0, "inner_step": 40, "curr_pos": 47, "curr_confidence": 0.9609375, "hit": 1, "prev_pos": 46, "prev_topk_positions": [50, 47, 49, 51, 52, 48, 53, 54]}
+{"global_step": 41, "block_id": 0, "inner_step": 41, "curr_pos": 49, "curr_confidence": 0.94140625, "hit": 1, "prev_pos": 47, "prev_topk_positions": [48, 51, 49, 50, 52, 55, 53, 54]}
+{"global_step": 42, "block_id": 0, "inner_step": 42, "curr_pos": 48, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 49, "prev_topk_positions": [48, 50, 51, 52, 53, 55, 54, 60]}
+{"global_step": 43, "block_id": 0, "inner_step": 43, "curr_pos": 51, "curr_confidence": 0.734375, "hit": 1, "prev_pos": 48, "prev_topk_positions": [50, 51, 52, 53, 57, 54, 56, 55]}
+{"global_step": 44, "block_id": 0, "inner_step": 44, "curr_pos": 53, "curr_confidence": 0.9140625, "hit": 1, "prev_pos": 51, "prev_topk_positions": [52, 50, 55, 53, 54, 57, 56, 61]}
+{"global_step": 45, "block_id": 0, "inner_step": 45, "curr_pos": 52, "curr_confidence": 1.0, "hit": 1, "prev_pos": 53, "prev_topk_positions": [52, 54, 57, 55, 56, 50, 58, 59]}
+{"global_step": 46, "block_id": 0, "inner_step": 46, "curr_pos": 50, "curr_confidence": 0.875, "hit": 1, "prev_pos": 52, "prev_topk_positions": [54, 57, 56, 50, 55, 58, 61, 59]}
+{"global_step": 47, "block_id": 0, "inner_step": 47, "curr_pos": 54, "curr_confidence": 0.5390625, "hit": 1, "prev_pos": 50, "prev_topk_positions": [54, 55, 56, 61, 57, 66, 60, 62]}
+{"global_step": 48, "block_id": 0, "inner_step": 48, "curr_pos": 55, "curr_confidence": 0.453125, "hit": 1, "prev_pos": 54, "prev_topk_positions": [55, 57, 56, 58, 59, 60, 61, 66]}
+{"global_step": 49, "block_id": 0, "inner_step": 49, "curr_pos": 56, "curr_confidence": 0.95703125, "hit": 1, "prev_pos": 55, "prev_topk_positions": [56, 57, 61, 59, 60, 58, 62, 63]}
+{"global_step": 50, "block_id": 0, "inner_step": 50, "curr_pos": 57, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 56, "prev_topk_positions": [57, 58, 60, 59, 62, 64, 65, 61]}
+{"global_step": 51, "block_id": 0, "inner_step": 51, "curr_pos": 58, "curr_confidence": 0.70703125, "hit": 1, "prev_pos": 57, "prev_topk_positions": [58, 60, 62, 59, 63, 61, 64, 65]}
+{"global_step": 52, "block_id": 0, "inner_step": 52, "curr_pos": 59, "curr_confidence": 0.8984375, "hit": 1, "prev_pos": 58, "prev_topk_positions": [60, 59, 63, 61, 62, 64, 65, 67]}
+{"global_step": 53, "block_id": 0, "inner_step": 53, "curr_pos": 61, "curr_confidence": 0.94140625, "hit": 1, "prev_pos": 59, "prev_topk_positions": [60, 61, 64, 62, 63, 65, 66, 67]}
+{"global_step": 54, "block_id": 0, "inner_step": 54, "curr_pos": 60, "curr_confidence": 1.0, "hit": 1, "prev_pos": 61, "prev_topk_positions": [60, 62, 64, 63, 65, 66, 67, 68]}
+{"global_step": 55, "block_id": 0, "inner_step": 55, "curr_pos": 62, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 60, "prev_topk_positions": [62, 63, 64, 65, 66, 67, 70, 69]}
+{"global_step": 56, "block_id": 0, "inner_step": 56, "curr_pos": 63, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 62, "prev_topk_positions": [63, 64, 65, 66, 67, 70, 68, 69]}
+{"global_step": 57, "block_id": 0, "inner_step": 57, "curr_pos": 64, "curr_confidence": 0.95703125, "hit": 1, "prev_pos": 63, "prev_topk_positions": [64, 65, 66, 67, 70, 68, 69]}
+{"global_step": 58, "block_id": 0, "inner_step": 58, "curr_pos": 65, "curr_confidence": 0.84765625, "hit": 1, "prev_pos": 64, "prev_topk_positions": [65, 66, 67, 70, 68, 69]}
+{"global_step": 59, "block_id": 0, "inner_step": 59, "curr_pos": 68, "curr_confidence": 0.09130859375, "hit": 1, "prev_pos": 65, "prev_topk_positions": [66, 67, 70, 68, 69]}
+{"global_step": 60, "block_id": 0, "inner_step": 60, "curr_pos": 66, "curr_confidence": 0.65234375, "hit": 1, "prev_pos": 68, "prev_topk_positions": [67, 66, 69, 70]}
+{"global_step": 61, "block_id": 0, "inner_step": 61, "curr_pos": 67, "curr_confidence": 0.67578125, "hit": 1, "prev_pos": 66, "prev_topk_positions": [67, 69, 70]}
+{"global_step": 62, "block_id": 0, "inner_step": 62, "curr_pos": 70, "curr_confidence": 0.400390625, "hit": 1, "prev_pos": 67, "prev_topk_positions": [70, 69]}
+{"global_step": 63, "block_id": 0, "inner_step": 63, "curr_pos": 69, "curr_confidence": 0.2431640625, "hit": 1, "prev_pos": 70, "prev_topk_positions": [69]}
+{"global_step": 64, "block_id": 1, "inner_step": 0, "curr_pos": 71, "curr_confidence": 0.267578125, "hit": null, "prev_pos": 69, "prev_topk_positions": []}
+{"global_step": 65, "block_id": 1, "inner_step": 1, "curr_pos": 72, "curr_confidence": 0.466796875, "hit": 1, "prev_pos": 71, "prev_topk_positions": [72, 73, 75, 74, 78, 81, 77, 83]}
+{"global_step": 66, "block_id": 1, "inner_step": 2, "curr_pos": 73, "curr_confidence": 0.330078125, "hit": 1, "prev_pos": 72, "prev_topk_positions": [73, 75, 74, 78, 76, 77, 109, 79]}
+{"global_step": 67, "block_id": 1, "inner_step": 3, "curr_pos": 75, "curr_confidence": 0.181640625, "hit": 1, "prev_pos": 73, "prev_topk_positions": [74, 75, 76, 78, 80, 77, 79, 83]}
+{"global_step": 68, "block_id": 1, "inner_step": 4, "curr_pos": 76, "curr_confidence": 0.58203125, "hit": 1, "prev_pos": 75, "prev_topk_positions": [74, 76, 79, 77, 78, 80, 81, 83]}
+{"global_step": 69, "block_id": 1, "inner_step": 5, "curr_pos": 74, "curr_confidence": 0.486328125, "hit": 1, "prev_pos": 76, "prev_topk_positions": [74, 77, 78, 80, 81, 79, 82, 83]}
+{"global_step": 70, "block_id": 1, "inner_step": 6, "curr_pos": 78, "curr_confidence": 0.412109375, "hit": 1, "prev_pos": 74, "prev_topk_positions": [78, 79, 77, 80, 83, 86, 81, 82]}
+{"global_step": 71, "block_id": 1, "inner_step": 7, "curr_pos": 80, "curr_confidence": 0.63671875, "hit": 1, "prev_pos": 78, "prev_topk_positions": [77, 79, 82, 80, 81, 83, 84, 86]}
+{"global_step": 72, "block_id": 1, "inner_step": 8, "curr_pos": 82, "curr_confidence": 0.875, "hit": 1, "prev_pos": 80, "prev_topk_positions": [79, 77, 84, 81, 82, 83, 85, 87]}
+{"global_step": 73, "block_id": 1, "inner_step": 9, "curr_pos": 81, "curr_confidence": 0.83203125, "hit": 1, "prev_pos": 82, "prev_topk_positions": [81, 83, 85, 77, 84, 79, 86, 87]}
+{"global_step": 74, "block_id": 1, "inner_step": 10, "curr_pos": 87, "curr_confidence": 0.80859375, "hit": 1, "prev_pos": 81, "prev_topk_positions": [84, 77, 85, 83, 79, 87, 86, 88]}
+{"global_step": 75, "block_id": 1, "inner_step": 11, "curr_pos": 86, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 87, "prev_topk_positions": [86, 88, 93, 85, 92, 94, 89, 84]}
+{"global_step": 76, "block_id": 1, "inner_step": 12, "curr_pos": 84, "curr_confidence": 0.91796875, "hit": 1, "prev_pos": 86, "prev_topk_positions": [85, 92, 88, 91, 84, 93, 89, 94]}
+{"global_step": 77, "block_id": 1, "inner_step": 13, "curr_pos": 85, "curr_confidence": 0.85546875, "hit": 1, "prev_pos": 84, "prev_topk_positions": [85, 83, 91, 92, 88, 77, 93, 90]}
+{"global_step": 78, "block_id": 1, "inner_step": 14, "curr_pos": 88, "curr_confidence": 0.71484375, "hit": 1, "prev_pos": 85, "prev_topk_positions": [92, 91, 93, 77, 88, 94, 89, 90]}
+{"global_step": 79, "block_id": 1, "inner_step": 15, "curr_pos": 91, "curr_confidence": 0.80859375, "hit": 1, "prev_pos": 88, "prev_topk_positions": [89, 91, 90, 92, 93, 95, 96, 94]}
+{"global_step": 80, "block_id": 1, "inner_step": 16, "curr_pos": 92, "curr_confidence": 0.890625, "hit": 1, "prev_pos": 91, "prev_topk_positions": [90, 89, 92, 93, 77, 79, 107, 96]}
+{"global_step": 81, "block_id": 1, "inner_step": 17, "curr_pos": 89, "curr_confidence": 0.77734375, "hit": 1, "prev_pos": 92, "prev_topk_positions": [94, 93, 104, 95, 89, 96, 90, 98]}
+{"global_step": 82, "block_id": 1, "inner_step": 18, "curr_pos": 77, "curr_confidence": 0.62109375, "hit": 1, "prev_pos": 89, "prev_topk_positions": [90, 77, 94, 93, 79, 98, 96, 95]}
+{"global_step": 83, "block_id": 1, "inner_step": 19, "curr_pos": 79, "curr_confidence": 0.416015625, "hit": 1, "prev_pos": 77, "prev_topk_positions": [79, 90, 83, 93, 94, 131, 128, 119]}
+{"global_step": 84, "block_id": 1, "inner_step": 20, "curr_pos": 83, "curr_confidence": 0.90234375, "hit": 1, "prev_pos": 79, "prev_topk_positions": [83, 90, 107, 93, 94, 119, 106, 110]}
+{"global_step": 85, "block_id": 1, "inner_step": 21, "curr_pos": 90, "curr_confidence": 0.376953125, "hit": 1, "prev_pos": 83, "prev_topk_positions": [90, 94, 93, 114, 119, 102, 95, 115]}
+{"global_step": 86, "block_id": 1, "inner_step": 22, "curr_pos": 95, "curr_confidence": 0.296875, "hit": 1, "prev_pos": 90, "prev_topk_positions": [93, 94, 96, 114, 98, 99, 102, 95]}
+{"global_step": 87, "block_id": 1, "inner_step": 23, "curr_pos": 93, "curr_confidence": 0.9375, "hit": 1, "prev_pos": 95, "prev_topk_positions": [94, 96, 93, 102, 98, 97, 100, 101]}
+{"global_step": 88, "block_id": 1, "inner_step": 24, "curr_pos": 96, "curr_confidence": 0.94921875, "hit": 1, "prev_pos": 93, "prev_topk_positions": [94, 119, 96, 98, 120, 97, 99, 101]}
+{"global_step": 89, "block_id": 1, "inner_step": 25, "curr_pos": 97, "curr_confidence": 1.0, "hit": 1, "prev_pos": 96, "prev_topk_positions": [94, 99, 97, 98, 101, 100, 114, 102]}
+{"global_step": 90, "block_id": 1, "inner_step": 26, "curr_pos": 98, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 97, "prev_topk_positions": [94, 99, 98, 100, 101, 120, 102, 119]}
+{"global_step": 91, "block_id": 1, "inner_step": 27, "curr_pos": 94, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 98, "prev_topk_positions": [94, 99, 100, 101, 119, 104, 102, 120]}
+{"global_step": 92, "block_id": 1, "inner_step": 28, "curr_pos": 99, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 94, "prev_topk_positions": [119, 120, 112, 101, 100, 99, 121, 118]}
+{"global_step": 93, "block_id": 1, "inner_step": 29, "curr_pos": 108, "curr_confidence": 0.96484375, "hit": 0, "prev_pos": 99, "prev_topk_positions": [100, 101, 106, 102, 119, 111, 110, 122]}
+{"global_step": 94, "block_id": 1, "inner_step": 30, "curr_pos": 101, "curr_confidence": 1.0, "hit": 1, "prev_pos": 108, "prev_topk_positions": [107, 101, 119, 115, 106, 120, 112, 111]}
+{"global_step": 95, "block_id": 1, "inner_step": 31, "curr_pos": 100, "curr_confidence": 1.0, "hit": 1, "prev_pos": 101, "prev_topk_positions": [100, 102, 105, 104, 106, 103, 112, 119]}
+{"global_step": 96, "block_id": 1, "inner_step": 32, "curr_pos": 102, "curr_confidence": 1.0, "hit": 1, "prev_pos": 100, "prev_topk_positions": [104, 111, 102, 106, 107, 112, 103, 118]}
+{"global_step": 97, "block_id": 1, "inner_step": 33, "curr_pos": 103, "curr_confidence": 1.0, "hit": 1, "prev_pos": 102, "prev_topk_positions": [106, 104, 103, 107, 105, 109, 110, 118]}
+{"global_step": 98, "block_id": 1, "inner_step": 34, "curr_pos": 104, "curr_confidence": 1.0, "hit": 1, "prev_pos": 103, "prev_topk_positions": [104, 107, 106, 105, 110, 111, 112, 119]}
+{"global_step": 99, "block_id": 1, "inner_step": 35, "curr_pos": 105, "curr_confidence": 1.0, "hit": 1, "prev_pos": 104, "prev_topk_positions": [106, 105, 107, 110, 111, 112, 118, 109]}
+{"global_step": 100, "block_id": 1, "inner_step": 36, "curr_pos": 106, "curr_confidence": 1.0, "hit": 1, "prev_pos": 105, "prev_topk_positions": [106, 107, 112, 118, 111, 110, 119, 120]}
+{"global_step": 101, "block_id": 1, "inner_step": 37, "curr_pos": 107, "curr_confidence": 1.0, "hit": 1, "prev_pos": 106, "prev_topk_positions": [107, 110, 112, 111, 109, 113, 114, 117]}
+{"global_step": 102, "block_id": 1, "inner_step": 38, "curr_pos": 109, "curr_confidence": 1.0, "hit": 1, "prev_pos": 107, "prev_topk_positions": [110, 111, 114, 112, 109, 118, 119, 113]}
+{"global_step": 103, "block_id": 1, "inner_step": 39, "curr_pos": 110, "curr_confidence": 1.0, "hit": 1, "prev_pos": 109, "prev_topk_positions": [110, 111, 112, 119, 113, 118, 115, 120]}
+{"global_step": 104, "block_id": 1, "inner_step": 40, "curr_pos": 112, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 110, "prev_topk_positions": [111, 112, 114, 117, 113, 119, 118, 115]}
+{"global_step": 105, "block_id": 1, "inner_step": 41, "curr_pos": 111, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 112, "prev_topk_positions": [111, 118, 119, 113, 120, 115, 114, 117]}
+{"global_step": 106, "block_id": 1, "inner_step": 42, "curr_pos": 113, "curr_confidence": 1.0, "hit": 1, "prev_pos": 111, "prev_topk_positions": [118, 119, 117, 114, 115, 120, 113, 132]}
+{"global_step": 107, "block_id": 1, "inner_step": 43, "curr_pos": 114, "curr_confidence": 1.0, "hit": 1, "prev_pos": 113, "prev_topk_positions": [114, 119, 118, 115, 120, 121, 117, 122]}
+{"global_step": 108, "block_id": 1, "inner_step": 44, "curr_pos": 115, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 114, "prev_topk_positions": [115, 119, 116, 118, 117, 121, 120, 122]}
+{"global_step": 109, "block_id": 1, "inner_step": 45, "curr_pos": 116, "curr_confidence": 1.0, "hit": 1, "prev_pos": 115, "prev_topk_positions": [116, 118, 117, 119, 120, 121, 122, 123]}
+{"global_step": 110, "block_id": 1, "inner_step": 46, "curr_pos": 117, "curr_confidence": 1.0, "hit": 1, "prev_pos": 116, "prev_topk_positions": [117, 118, 119, 120, 121, 123, 122, 124]}
+{"global_step": 111, "block_id": 1, "inner_step": 47, "curr_pos": 118, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 117, "prev_topk_positions": [118, 121, 119, 122, 120, 123, 124, 125]}
+{"global_step": 112, "block_id": 1, "inner_step": 48, "curr_pos": 119, "curr_confidence": 0.73046875, "hit": 1, "prev_pos": 118, "prev_topk_positions": [119, 120, 121, 123, 122, 124, 125, 126]}
+{"global_step": 113, "block_id": 1, "inner_step": 49, "curr_pos": 120, "curr_confidence": 0.5546875, "hit": 1, "prev_pos": 119, "prev_topk_positions": [120, 121, 132, 131, 122, 123, 130, 124]}
+{"global_step": 114, "block_id": 1, "inner_step": 50, "curr_pos": 121, "curr_confidence": 0.8125, "hit": 1, "prev_pos": 120, "prev_topk_positions": [121, 122, 132, 123, 131, 124, 130, 133]}
+{"global_step": 115, "block_id": 1, "inner_step": 51, "curr_pos": 122, "curr_confidence": 0.70703125, "hit": 1, "prev_pos": 121, "prev_topk_positions": [123, 122, 124, 127, 125, 126, 132, 128]}
+{"global_step": 116, "block_id": 1, "inner_step": 52, "curr_pos": 128, "curr_confidence": 0.82421875, "hit": 1, "prev_pos": 122, "prev_topk_positions": [123, 126, 125, 124, 127, 128, 134, 132]}
+{"global_step": 117, "block_id": 1, "inner_step": 53, "curr_pos": 129, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 128, "prev_topk_positions": [127, 126, 129, 130, 132, 125, 123, 124]}
+{"global_step": 118, "block_id": 1, "inner_step": 54, "curr_pos": 125, "curr_confidence": 0.9765625, "hit": 0, "prev_pos": 129, "prev_topk_positions": [127, 130, 126, 131, 133, 132, 134, 123]}
+{"global_step": 119, "block_id": 1, "inner_step": 55, "curr_pos": 123, "curr_confidence": 1.0, "hit": 1, "prev_pos": 125, "prev_topk_positions": [124, 123, 126, 127, 130, 131, 132, 134]}
+{"global_step": 120, "block_id": 1, "inner_step": 56, "curr_pos": 124, "curr_confidence": 1.0, "hit": 1, "prev_pos": 123, "prev_topk_positions": [126, 127, 124, 130, 134, 132, 133, 131]}
+{"global_step": 121, "block_id": 1, "inner_step": 57, "curr_pos": 126, "curr_confidence": 1.0, "hit": 1, "prev_pos": 124, "prev_topk_positions": [126, 127, 130, 132, 134, 131, 133]}
+{"global_step": 122, "block_id": 1, "inner_step": 58, "curr_pos": 127, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 126, "prev_topk_positions": [127, 130, 131, 132, 134, 133]}
+{"global_step": 123, "block_id": 1, "inner_step": 59, "curr_pos": 132, "curr_confidence": 0.59375, "hit": 1, "prev_pos": 127, "prev_topk_positions": [130, 131, 132, 133, 134]}
+{"global_step": 124, "block_id": 1, "inner_step": 60, "curr_pos": 131, "curr_confidence": 0.9375, "hit": 1, "prev_pos": 132, "prev_topk_positions": [131, 133, 130, 134]}
+{"global_step": 125, "block_id": 1, "inner_step": 61, "curr_pos": 130, "curr_confidence": 0.92578125, "hit": 1, "prev_pos": 131, "prev_topk_positions": [130, 133, 134]}
+{"global_step": 126, "block_id": 1, "inner_step": 62, "curr_pos": 134, "curr_confidence": 0.78125, "hit": 1, "prev_pos": 130, "prev_topk_positions": [133, 134]}
+{"global_step": 127, "block_id": 1, "inner_step": 63, "curr_pos": 133, "curr_confidence": 0.65234375, "hit": 1, "prev_pos": 134, "prev_topk_positions": [133]}
+{"global_step": 128, "block_id": 2, "inner_step": 0, "curr_pos": 136, "curr_confidence": 0.99609375, "hit": null, "prev_pos": 133, "prev_topk_positions": []}
+{"global_step": 129, "block_id": 2, "inner_step": 1, "curr_pos": 135, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 136, "prev_topk_positions": [135, 137, 141, 140, 150, 138, 147, 139]}
+{"global_step": 130, "block_id": 2, "inner_step": 2, "curr_pos": 137, "curr_confidence": 1.0, "hit": 1, "prev_pos": 135, "prev_topk_positions": [140, 141, 146, 137, 142, 150, 147, 139]}
+{"global_step": 131, "block_id": 2, "inner_step": 3, "curr_pos": 138, "curr_confidence": 1.0, "hit": 1, "prev_pos": 137, "prev_topk_positions": [139, 138, 150, 140, 148, 147, 141, 146]}
+{"global_step": 132, "block_id": 2, "inner_step": 4, "curr_pos": 139, "curr_confidence": 1.0, "hit": 1, "prev_pos": 138, "prev_topk_positions": [139, 140, 141, 150, 142, 151, 143, 149]}
+{"global_step": 133, "block_id": 2, "inner_step": 5, "curr_pos": 140, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 139, "prev_topk_positions": [140, 141, 151, 150, 142, 152, 145, 154]}
+{"global_step": 134, "block_id": 2, "inner_step": 6, "curr_pos": 141, "curr_confidence": 1.0, "hit": 1, "prev_pos": 140, "prev_topk_positions": [141, 142, 146, 143, 145, 152, 150, 151]}
+{"global_step": 135, "block_id": 2, "inner_step": 7, "curr_pos": 142, "curr_confidence": 1.0, "hit": 1, "prev_pos": 141, "prev_topk_positions": [142, 145, 143, 151, 144, 150, 154, 146]}
+{"global_step": 136, "block_id": 2, "inner_step": 8, "curr_pos": 143, "curr_confidence": 1.0, "hit": 1, "prev_pos": 142, "prev_topk_positions": [143, 146, 145, 154, 153, 152, 144, 150]}
+{"global_step": 137, "block_id": 2, "inner_step": 9, "curr_pos": 144, "curr_confidence": 1.0, "hit": 1, "prev_pos": 143, "prev_topk_positions": [144, 146, 145, 154, 147, 155, 150, 151]}
+{"global_step": 138, "block_id": 2, "inner_step": 10, "curr_pos": 145, "curr_confidence": 1.0, "hit": 1, "prev_pos": 144, "prev_topk_positions": [145, 146, 147, 154, 155, 150, 157, 158]}
+{"global_step": 139, "block_id": 2, "inner_step": 11, "curr_pos": 153, "curr_confidence": 0.63671875, "hit": 0, "prev_pos": 145, "prev_topk_positions": [146, 155, 147, 154, 150, 151, 156, 148]}
+{"global_step": 140, "block_id": 2, "inner_step": 12, "curr_pos": 146, "curr_confidence": 1.0, "hit": 1, "prev_pos": 153, "prev_topk_positions": [150, 151, 154, 152, 146, 163, 149, 147]}
+{"global_step": 141, "block_id": 2, "inner_step": 13, "curr_pos": 147, "curr_confidence": 1.0, "hit": 1, "prev_pos": 146, "prev_topk_positions": [156, 147, 159, 155, 149, 160, 157, 148]}
+{"global_step": 142, "block_id": 2, "inner_step": 14, "curr_pos": 148, "curr_confidence": 1.0, "hit": 1, "prev_pos": 147, "prev_topk_positions": [156, 149, 157, 148, 160, 154, 150, 159]}
+{"global_step": 143, "block_id": 2, "inner_step": 15, "curr_pos": 149, "curr_confidence": 1.0, "hit": 1, "prev_pos": 148, "prev_topk_positions": [149, 150, 158, 152, 155, 157, 159, 160]}
+{"global_step": 144, "block_id": 2, "inner_step": 16, "curr_pos": 150, "curr_confidence": 1.0, "hit": 1, "prev_pos": 149, "prev_topk_positions": [150, 156, 159, 152, 151, 160, 155, 158]}
+{"global_step": 145, "block_id": 2, "inner_step": 17, "curr_pos": 151, "curr_confidence": 1.0, "hit": 1, "prev_pos": 150, "prev_topk_positions": [151, 156, 160, 159, 157, 154, 152, 155]}
+{"global_step": 146, "block_id": 2, "inner_step": 18, "curr_pos": 152, "curr_confidence": 1.0, "hit": 1, "prev_pos": 151, "prev_topk_positions": [154, 157, 152, 160, 156, 155, 158, 161]}
+{"global_step": 147, "block_id": 2, "inner_step": 19, "curr_pos": 154, "curr_confidence": 1.0, "hit": 1, "prev_pos": 152, "prev_topk_positions": [155, 156, 158, 159, 157, 160, 161, 154]}
+{"global_step": 148, "block_id": 2, "inner_step": 20, "curr_pos": 155, "curr_confidence": 1.0, "hit": 1, "prev_pos": 154, "prev_topk_positions": [156, 157, 155, 160, 159, 158, 161, 162]}
+{"global_step": 149, "block_id": 2, "inner_step": 21, "curr_pos": 156, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 155, "prev_topk_positions": [158, 156, 159, 160, 157, 161, 162, 171]}
+{"global_step": 150, "block_id": 2, "inner_step": 22, "curr_pos": 157, "curr_confidence": 0.9453125, "hit": 1, "prev_pos": 156, "prev_topk_positions": [159, 157, 160, 158, 162, 161, 163, 188]}
+{"global_step": 151, "block_id": 2, "inner_step": 23, "curr_pos": 158, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 157, "prev_topk_positions": [158, 159, 160, 161, 162, 163, 171, 164]}
+{"global_step": 152, "block_id": 2, "inner_step": 24, "curr_pos": 161, "curr_confidence": 0.91015625, "hit": 1, "prev_pos": 158, "prev_topk_positions": [159, 160, 161, 162, 171, 163, 164, 165]}
+{"global_step": 153, "block_id": 2, "inner_step": 25, "curr_pos": 160, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 161, "prev_topk_positions": [160, 162, 159, 163, 164, 165, 195, 171]}
+{"global_step": 154, "block_id": 2, "inner_step": 26, "curr_pos": 163, "curr_confidence": 0.85546875, "hit": 1, "prev_pos": 160, "prev_topk_positions": [159, 162, 163, 164, 165, 188, 172, 189]}
+{"global_step": 155, "block_id": 2, "inner_step": 27, "curr_pos": 164, "curr_confidence": 0.97265625, "hit": 1, "prev_pos": 163, "prev_topk_positions": [162, 164, 165, 159, 168, 167, 166, 170]}
+{"global_step": 156, "block_id": 2, "inner_step": 28, "curr_pos": 165, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 164, "prev_topk_positions": [162, 165, 169, 166, 159, 167, 170, 168]}
+{"global_step": 157, "block_id": 2, "inner_step": 29, "curr_pos": 166, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 165, "prev_topk_positions": [168, 162, 166, 167, 169, 170, 159, 171]}
+{"global_step": 158, "block_id": 2, "inner_step": 30, "curr_pos": 167, "curr_confidence": 1.0, "hit": 1, "prev_pos": 166, "prev_topk_positions": [162, 159, 167, 169, 168, 170, 172, 171]}
+{"global_step": 159, "block_id": 2, "inner_step": 31, "curr_pos": 168, "curr_confidence": 1.0, "hit": 1, "prev_pos": 167, "prev_topk_positions": [168, 169, 170, 162, 159, 173, 181, 172]}
+{"global_step": 160, "block_id": 2, "inner_step": 32, "curr_pos": 159, "curr_confidence": 0.875, "hit": 1, "prev_pos": 168, "prev_topk_positions": [169, 159, 162, 170, 171, 172, 175, 181]}
+{"global_step": 161, "block_id": 2, "inner_step": 33, "curr_pos": 177, "curr_confidence": 0.75, "hit": 0, "prev_pos": 159, "prev_topk_positions": [162, 172, 171, 169, 170, 176, 187, 190]}
+{"global_step": 162, "block_id": 2, "inner_step": 34, "curr_pos": 169, "curr_confidence": 1.0, "hit": 0, "prev_pos": 177, "prev_topk_positions": [181, 176, 178, 179, 185, 188, 195, 189]}
+{"global_step": 163, "block_id": 2, "inner_step": 35, "curr_pos": 170, "curr_confidence": 1.0, "hit": 1, "prev_pos": 169, "prev_topk_positions": [180, 170, 181, 162, 179, 173, 176, 175]}
+{"global_step": 164, "block_id": 2, "inner_step": 36, "curr_pos": 171, "curr_confidence": 1.0, "hit": 1, "prev_pos": 170, "prev_topk_positions": [174, 175, 179, 171, 162, 173, 181, 176]}
+{"global_step": 165, "block_id": 2, "inner_step": 37, "curr_pos": 172, "curr_confidence": 1.0, "hit": 1, "prev_pos": 171, "prev_topk_positions": [175, 172, 178, 179, 174, 173, 180, 176]}
+{"global_step": 166, "block_id": 2, "inner_step": 38, "curr_pos": 173, "curr_confidence": 1.0, "hit": 1, "prev_pos": 172, "prev_topk_positions": [173, 179, 180, 176, 174, 178, 175, 181]}
+{"global_step": 167, "block_id": 2, "inner_step": 39, "curr_pos": 174, "curr_confidence": 1.0, "hit": 1, "prev_pos": 173, "prev_topk_positions": [175, 174, 178, 179, 180, 176, 181, 186]}
+{"global_step": 168, "block_id": 2, "inner_step": 40, "curr_pos": 175, "curr_confidence": 1.0, "hit": 1, "prev_pos": 174, "prev_topk_positions": [175, 178, 176, 181, 179, 180, 186, 191]}
+{"global_step": 169, "block_id": 2, "inner_step": 41, "curr_pos": 176, "curr_confidence": 1.0, "hit": 1, "prev_pos": 175, "prev_topk_positions": [178, 179, 180, 176, 181, 186, 182, 183]}
+{"global_step": 170, "block_id": 2, "inner_step": 42, "curr_pos": 178, "curr_confidence": 1.0, "hit": 1, "prev_pos": 176, "prev_topk_positions": [179, 180, 178, 183, 181, 187, 186, 182]}
+{"global_step": 171, "block_id": 2, "inner_step": 43, "curr_pos": 179, "curr_confidence": 1.0, "hit": 1, "prev_pos": 178, "prev_topk_positions": [179, 180, 189, 186, 181, 188, 185, 187]}
+{"global_step": 172, "block_id": 2, "inner_step": 44, "curr_pos": 180, "curr_confidence": 1.0, "hit": 1, "prev_pos": 179, "prev_topk_positions": [180, 181, 186, 189, 188, 183, 190, 182]}
+{"global_step": 173, "block_id": 2, "inner_step": 45, "curr_pos": 183, "curr_confidence": 1.0, "hit": 1, "prev_pos": 180, "prev_topk_positions": [181, 187, 188, 186, 183, 162, 191, 189]}
+{"global_step": 174, "block_id": 2, "inner_step": 46, "curr_pos": 181, "curr_confidence": 1.0, "hit": 1, "prev_pos": 183, "prev_topk_positions": [182, 181, 186, 189, 184, 190, 188, 187]}
+{"global_step": 175, "block_id": 2, "inner_step": 47, "curr_pos": 182, "curr_confidence": 1.0, "hit": 1, "prev_pos": 181, "prev_topk_positions": [162, 188, 187, 182, 184, 186, 189, 191]}
+{"global_step": 176, "block_id": 2, "inner_step": 48, "curr_pos": 184, "curr_confidence": 1.0, "hit": 1, "prev_pos": 182, "prev_topk_positions": [184, 188, 187, 186, 185, 189, 191, 162]}
+{"global_step": 177, "block_id": 2, "inner_step": 49, "curr_pos": 185, "curr_confidence": 1.0, "hit": 1, "prev_pos": 184, "prev_topk_positions": [186, 185, 188, 187, 162, 189, 191, 190]}
+{"global_step": 178, "block_id": 2, "inner_step": 50, "curr_pos": 186, "curr_confidence": 1.0, "hit": 1, "prev_pos": 185, "prev_topk_positions": [186, 187, 188, 189, 191, 190, 162, 192]}
+{"global_step": 179, "block_id": 2, "inner_step": 51, "curr_pos": 187, "curr_confidence": 1.0, "hit": 1, "prev_pos": 186, "prev_topk_positions": [187, 188, 189, 190, 191, 162, 192, 193]}
+{"global_step": 180, "block_id": 2, "inner_step": 52, "curr_pos": 188, "curr_confidence": 1.0, "hit": 1, "prev_pos": 187, "prev_topk_positions": [188, 162, 191, 189, 190, 192, 193, 198]}
+{"global_step": 181, "block_id": 2, "inner_step": 53, "curr_pos": 162, "curr_confidence": 0.68359375, "hit": 1, "prev_pos": 188, "prev_topk_positions": [162, 191, 189, 190, 192, 193, 194, 195]}
+{"global_step": 182, "block_id": 2, "inner_step": 54, "curr_pos": 191, "curr_confidence": 0.61328125, "hit": 1, "prev_pos": 162, "prev_topk_positions": [190, 189, 192, 191, 193, 195, 198, 194]}
+{"global_step": 183, "block_id": 2, "inner_step": 55, "curr_pos": 190, "curr_confidence": 1.0, "hit": 1, "prev_pos": 191, "prev_topk_positions": [190, 189, 192, 193, 194, 198, 195, 196]}
+{"global_step": 184, "block_id": 2, "inner_step": 56, "curr_pos": 192, "curr_confidence": 1.0, "hit": 1, "prev_pos": 190, "prev_topk_positions": [189, 193, 192, 194, 195, 196, 198, 197]}
+{"global_step": 185, "block_id": 2, "inner_step": 57, "curr_pos": 194, "curr_confidence": 0.91015625, "hit": 1, "prev_pos": 192, "prev_topk_positions": [193, 189, 194, 195, 196, 198, 197]}
+{"global_step": 186, "block_id": 2, "inner_step": 58, "curr_pos": 189, "curr_confidence": 0.59375, "hit": 1, "prev_pos": 194, "prev_topk_positions": [193, 195, 189, 196, 197, 198]}
+{"global_step": 187, "block_id": 2, "inner_step": 59, "curr_pos": 193, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 189, "prev_topk_positions": [193, 195, 196, 198, 197]}
+{"global_step": 188, "block_id": 2, "inner_step": 60, "curr_pos": 195, "curr_confidence": 0.0869140625, "hit": 1, "prev_pos": 193, "prev_topk_positions": [195, 198, 196, 197]}
+{"global_step": 189, "block_id": 2, "inner_step": 61, "curr_pos": 197, "curr_confidence": 0.7421875, "hit": 1, "prev_pos": 195, "prev_topk_positions": [196, 197, 198]}
+{"global_step": 190, "block_id": 2, "inner_step": 62, "curr_pos": 196, "curr_confidence": 0.8125, "hit": 1, "prev_pos": 197, "prev_topk_positions": [196, 198]}
+{"global_step": 191, "block_id": 2, "inner_step": 63, "curr_pos": 198, "curr_confidence": 0.10791015625, "hit": 1, "prev_pos": 196, "prev_topk_positions": [198]}
+{"global_step": 192, "block_id": 3, "inner_step": 0, "curr_pos": 199, "curr_confidence": 0.98828125, "hit": null, "prev_pos": 198, "prev_topk_positions": []}
+{"global_step": 193, "block_id": 3, "inner_step": 1, "curr_pos": 200, "curr_confidence": 0.33203125, "hit": 1, "prev_pos": 199, "prev_topk_positions": [200, 202, 201, 204, 203, 206, 205, 208]}
+{"global_step": 194, "block_id": 3, "inner_step": 2, "curr_pos": 202, "curr_confidence": 0.6015625, "hit": 1, "prev_pos": 200, "prev_topk_positions": [201, 202, 203, 208, 204, 206, 205, 219]}
+{"global_step": 195, "block_id": 3, "inner_step": 3, "curr_pos": 204, "curr_confidence": 0.59375, "hit": 1, "prev_pos": 202, "prev_topk_positions": [201, 208, 203, 206, 212, 207, 204, 210]}
+{"global_step": 196, "block_id": 3, "inner_step": 4, "curr_pos": 203, "curr_confidence": 0.74609375, "hit": 1, "prev_pos": 204, "prev_topk_positions": [203, 206, 205, 207, 208, 201, 209, 211]}
+{"global_step": 197, "block_id": 3, "inner_step": 5, "curr_pos": 205, "curr_confidence": 0.7109375, "hit": 1, "prev_pos": 203, "prev_topk_positions": [201, 206, 207, 209, 205, 210, 211, 208]}
+{"global_step": 198, "block_id": 3, "inner_step": 6, "curr_pos": 206, "curr_confidence": 0.71484375, "hit": 1, "prev_pos": 205, "prev_topk_positions": [206, 207, 201, 208, 211, 227, 209, 212]}
+{"global_step": 199, "block_id": 3, "inner_step": 7, "curr_pos": 201, "curr_confidence": 0.62890625, "hit": 1, "prev_pos": 206, "prev_topk_positions": [207, 201, 208, 209, 212, 210, 211, 213]}
+{"global_step": 200, "block_id": 3, "inner_step": 8, "curr_pos": 208, "curr_confidence": 0.365234375, "hit": 1, "prev_pos": 201, "prev_topk_positions": [207, 208, 210, 209, 211, 213, 212, 214]}
+{"global_step": 201, "block_id": 3, "inner_step": 9, "curr_pos": 210, "curr_confidence": 0.609375, "hit": 1, "prev_pos": 208, "prev_topk_positions": [207, 209, 210, 213, 212, 211, 214, 215]}
+{"global_step": 202, "block_id": 3, "inner_step": 10, "curr_pos": 213, "curr_confidence": 0.546875, "hit": 1, "prev_pos": 210, "prev_topk_positions": [209, 211, 212, 207, 214, 213, 215, 216]}
+{"global_step": 203, "block_id": 3, "inner_step": 11, "curr_pos": 212, "curr_confidence": 0.9375, "hit": 1, "prev_pos": 213, "prev_topk_positions": [212, 209, 214, 215, 211, 216, 207, 217]}
+{"global_step": 204, "block_id": 3, "inner_step": 12, "curr_pos": 216, "curr_confidence": 0.58984375, "hit": 1, "prev_pos": 212, "prev_topk_positions": [211, 215, 209, 214, 216, 218, 207, 217]}
+{"global_step": 205, "block_id": 3, "inner_step": 13, "curr_pos": 217, "curr_confidence": 0.96875, "hit": 1, "prev_pos": 216, "prev_topk_positions": [215, 209, 217, 214, 211, 219, 218, 207]}
+{"global_step": 206, "block_id": 3, "inner_step": 14, "curr_pos": 209, "curr_confidence": 0.6484375, "hit": 1, "prev_pos": 217, "prev_topk_positions": [218, 219, 209, 211, 221, 220, 207, 214]}
+{"global_step": 207, "block_id": 3, "inner_step": 15, "curr_pos": 214, "curr_confidence": 0.53515625, "hit": 1, "prev_pos": 209, "prev_topk_positions": [211, 207, 214, 215, 219, 218, 232, 221]}
+{"global_step": 208, "block_id": 3, "inner_step": 16, "curr_pos": 207, "curr_confidence": 0.44921875, "hit": 1, "prev_pos": 214, "prev_topk_positions": [211, 207, 215, 218, 219, 237, 221, 220]}
+{"global_step": 209, "block_id": 3, "inner_step": 17, "curr_pos": 211, "curr_confidence": 0.341796875, "hit": 1, "prev_pos": 207, "prev_topk_positions": [211, 215, 218, 219, 221, 230, 220, 229]}
+{"global_step": 210, "block_id": 3, "inner_step": 18, "curr_pos": 215, "curr_confidence": 0.447265625, "hit": 1, "prev_pos": 211, "prev_topk_positions": [215, 218, 221, 233, 219, 224, 240, 220]}
+{"global_step": 211, "block_id": 3, "inner_step": 19, "curr_pos": 218, "curr_confidence": 0.40625, "hit": 1, "prev_pos": 215, "prev_topk_positions": [240, 235, 237, 221, 219, 218, 238, 259]}
+{"global_step": 212, "block_id": 3, "inner_step": 20, "curr_pos": 219, "curr_confidence": 0.73828125, "hit": 1, "prev_pos": 218, "prev_topk_positions": [219, 220, 221, 222, 224, 227, 223, 226]}
+{"global_step": 213, "block_id": 3, "inner_step": 21, "curr_pos": 221, "curr_confidence": 0.9609375, "hit": 1, "prev_pos": 219, "prev_topk_positions": [220, 221, 222, 223, 224, 227, 225, 239]}
+{"global_step": 214, "block_id": 3, "inner_step": 22, "curr_pos": 222, "curr_confidence": 0.87109375, "hit": 1, "prev_pos": 221, "prev_topk_positions": [220, 222, 223, 224, 227, 225, 229, 226]}
+{"global_step": 215, "block_id": 3, "inner_step": 23, "curr_pos": 220, "curr_confidence": 1.0, "hit": 1, "prev_pos": 222, "prev_topk_positions": [220, 223, 224, 225, 226, 234, 239, 230]}
+{"global_step": 216, "block_id": 3, "inner_step": 24, "curr_pos": 224, "curr_confidence": 0.9765625, "hit": 1, "prev_pos": 220, "prev_topk_positions": [223, 225, 228, 224, 226, 227, 229, 234]}
+{"global_step": 217, "block_id": 3, "inner_step": 25, "curr_pos": 223, "curr_confidence": 1.0, "hit": 1, "prev_pos": 224, "prev_topk_positions": [223, 225, 226, 227, 228, 229, 230, 239]}
+{"global_step": 218, "block_id": 3, "inner_step": 26, "curr_pos": 226, "curr_confidence": 0.392578125, "hit": 1, "prev_pos": 223, "prev_topk_positions": [225, 226, 227, 228, 239, 229, 237, 233]}
+{"global_step": 219, "block_id": 3, "inner_step": 27, "curr_pos": 225, "curr_confidence": 1.0, "hit": 1, "prev_pos": 226, "prev_topk_positions": [225, 228, 227, 229, 230, 231, 239, 233]}
+{"global_step": 220, "block_id": 3, "inner_step": 28, "curr_pos": 229, "curr_confidence": 0.921875, "hit": 1, "prev_pos": 225, "prev_topk_positions": [227, 228, 230, 229, 236, 235, 231, 242]}
+{"global_step": 221, "block_id": 3, "inner_step": 29, "curr_pos": 230, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 229, "prev_topk_positions": [228, 227, 230, 231, 236, 233, 232, 239]}
+{"global_step": 222, "block_id": 3, "inner_step": 30, "curr_pos": 228, "curr_confidence": 0.9453125, "hit": 1, "prev_pos": 230, "prev_topk_positions": [228, 231, 234, 227, 235, 232, 233, 247]}
+{"global_step": 223, "block_id": 3, "inner_step": 31, "curr_pos": 231, "curr_confidence": 0.9375, "hit": 1, "prev_pos": 228, "prev_topk_positions": [227, 231, 235, 232, 236, 237, 234, 247]}
+{"global_step": 224, "block_id": 3, "inner_step": 32, "curr_pos": 232, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 231, "prev_topk_positions": [232, 235, 227, 234, 233, 236, 237, 247]}
+{"global_step": 225, "block_id": 3, "inner_step": 33, "curr_pos": 234, "curr_confidence": 0.95703125, "hit": 1, "prev_pos": 232, "prev_topk_positions": [233, 235, 234, 236, 227, 237, 251, 238]}
+{"global_step": 226, "block_id": 3, "inner_step": 34, "curr_pos": 233, "curr_confidence": 1.0, "hit": 1, "prev_pos": 234, "prev_topk_positions": [235, 233, 227, 251, 236, 239, 240, 237]}
+{"global_step": 227, "block_id": 3, "inner_step": 35, "curr_pos": 235, "curr_confidence": 0.73828125, "hit": 1, "prev_pos": 233, "prev_topk_positions": [235, 227, 250, 249, 251, 236, 237, 242]}
+{"global_step": 228, "block_id": 3, "inner_step": 36, "curr_pos": 227, "curr_confidence": 0.63671875, "hit": 1, "prev_pos": 235, "prev_topk_positions": [227, 236, 237, 238, 252, 251, 247, 239]}
+{"global_step": 229, "block_id": 3, "inner_step": 37, "curr_pos": 237, "curr_confidence": 0.5625, "hit": 1, "prev_pos": 227, "prev_topk_positions": [245, 236, 237, 246, 238, 244, 247, 243]}
+{"global_step": 230, "block_id": 3, "inner_step": 38, "curr_pos": 236, "curr_confidence": 1.0, "hit": 1, "prev_pos": 237, "prev_topk_positions": [236, 238, 239, 240, 245, 241, 242, 247]}
+{"global_step": 231, "block_id": 3, "inner_step": 39, "curr_pos": 239, "curr_confidence": 0.87890625, "hit": 1, "prev_pos": 236, "prev_topk_positions": [238, 240, 239, 243, 241, 242, 244, 245]}
+{"global_step": 232, "block_id": 3, "inner_step": 40, "curr_pos": 238, "curr_confidence": 1.0, "hit": 1, "prev_pos": 239, "prev_topk_positions": [240, 238, 241, 242, 243, 244, 246, 245]}
+{"global_step": 233, "block_id": 3, "inner_step": 41, "curr_pos": 240, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 238, "prev_topk_positions": [240, 241, 243, 242, 244, 245, 246, 247]}
+{"global_step": 234, "block_id": 3, "inner_step": 42, "curr_pos": 242, "curr_confidence": 1.0, "hit": 1, "prev_pos": 240, "prev_topk_positions": [242, 243, 241, 244, 245, 246, 250, 247]}
+{"global_step": 235, "block_id": 3, "inner_step": 43, "curr_pos": 241, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 242, "prev_topk_positions": [241, 243, 244, 246, 245, 247, 250, 252]}
+{"global_step": 236, "block_id": 3, "inner_step": 44, "curr_pos": 243, "curr_confidence": 0.9609375, "hit": 1, "prev_pos": 241, "prev_topk_positions": [243, 244, 245, 246, 250, 247, 251, 249]}
+{"global_step": 237, "block_id": 3, "inner_step": 45, "curr_pos": 244, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 243, "prev_topk_positions": [244, 245, 246, 247, 250, 253, 248, 252]}
+{"global_step": 238, "block_id": 3, "inner_step": 46, "curr_pos": 247, "curr_confidence": 0.8671875, "hit": 1, "prev_pos": 244, "prev_topk_positions": [245, 246, 247, 250, 248, 252, 254, 249]}
+{"global_step": 239, "block_id": 3, "inner_step": 47, "curr_pos": 246, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 247, "prev_topk_positions": [246, 245, 248, 250, 249, 252, 251, 253]}
+{"global_step": 240, "block_id": 3, "inner_step": 48, "curr_pos": 248, "curr_confidence": 0.93359375, "hit": 1, "prev_pos": 246, "prev_topk_positions": [245, 248, 250, 251, 252, 249, 253, 254]}
+{"global_step": 241, "block_id": 3, "inner_step": 49, "curr_pos": 245, "curr_confidence": 0.8125, "hit": 1, "prev_pos": 248, "prev_topk_positions": [245, 250, 249, 252, 251, 253, 254, 255]}
+{"global_step": 242, "block_id": 3, "inner_step": 50, "curr_pos": 250, "curr_confidence": 0.75, "hit": 1, "prev_pos": 245, "prev_topk_positions": [250, 252, 253, 249, 251, 255, 254, 256]}
+{"global_step": 243, "block_id": 3, "inner_step": 51, "curr_pos": 249, "curr_confidence": 1.0, "hit": 1, "prev_pos": 250, "prev_topk_positions": [249, 252, 251, 255, 253, 254, 258, 257]}
+{"global_step": 244, "block_id": 3, "inner_step": 52, "curr_pos": 251, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 249, "prev_topk_positions": [253, 251, 254, 252, 255, 257, 258, 259]}
+{"global_step": 245, "block_id": 3, "inner_step": 53, "curr_pos": 252, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 251, "prev_topk_positions": [253, 252, 254, 258, 257, 255, 261, 256]}
+{"global_step": 246, "block_id": 3, "inner_step": 54, "curr_pos": 253, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 252, "prev_topk_positions": [253, 254, 258, 257, 259, 255, 261, 256]}
+{"global_step": 247, "block_id": 3, "inner_step": 55, "curr_pos": 254, "curr_confidence": 0.5, "hit": 1, "prev_pos": 253, "prev_topk_positions": [254, 258, 259, 255, 256, 257, 261, 260]}
+{"global_step": 248, "block_id": 3, "inner_step": 56, "curr_pos": 256, "curr_confidence": 0.09619140625, "hit": 1, "prev_pos": 254, "prev_topk_positions": [259, 256, 257, 255, 261, 258, 260, 262]}
+{"global_step": 249, "block_id": 3, "inner_step": 57, "curr_pos": 255, "curr_confidence": 0.212890625, "hit": 1, "prev_pos": 256, "prev_topk_positions": [255, 257, 258, 261, 260, 262, 259]}
+{"global_step": 250, "block_id": 3, "inner_step": 58, "curr_pos": 257, "curr_confidence": 0.1767578125, "hit": 1, "prev_pos": 255, "prev_topk_positions": [259, 257, 258, 260, 261, 262]}
+{"global_step": 251, "block_id": 3, "inner_step": 59, "curr_pos": 259, "curr_confidence": 0.49609375, "hit": 1, "prev_pos": 257, "prev_topk_positions": [258, 259, 260, 261, 262]}
+{"global_step": 252, "block_id": 3, "inner_step": 60, "curr_pos": 258, "curr_confidence": 0.6171875, "hit": 1, "prev_pos": 259, "prev_topk_positions": [258, 260, 261, 262]}
+{"global_step": 253, "block_id": 3, "inner_step": 61, "curr_pos": 260, "curr_confidence": 0.78515625, "hit": 1, "prev_pos": 258, "prev_topk_positions": [260, 261, 262]}
+{"global_step": 254, "block_id": 3, "inner_step": 62, "curr_pos": 261, "curr_confidence": 0.9296875, "hit": 1, "prev_pos": 260, "prev_topk_positions": [262, 261]}
+{"global_step": 255, "block_id": 3, "inner_step": 63, "curr_pos": 262, "curr_confidence": 0.123046875, "hit": 1, "prev_pos": 261, "prev_topk_positions": [262]}
+{"global_step": 256, "block_id": 4, "inner_step": 0, "curr_pos": 264, "curr_confidence": 0.10205078125, "hit": null, "prev_pos": 262, "prev_topk_positions": []}
+{"global_step": 257, "block_id": 4, "inner_step": 1, "curr_pos": 265, "curr_confidence": 0.2734375, "hit": 1, "prev_pos": 264, "prev_topk_positions": [263, 267, 270, 269, 265, 323, 289, 268]}
+{"global_step": 258, "block_id": 4, "inner_step": 2, "curr_pos": 272, "curr_confidence": 0.062255859375, "hit": 0, "prev_pos": 265, "prev_topk_positions": [323, 266, 268, 267, 263, 270, 273, 269]}
+{"global_step": 259, "block_id": 4, "inner_step": 3, "curr_pos": 274, "curr_confidence": 0.181640625, "hit": 0, "prev_pos": 272, "prev_topk_positions": [323, 278, 271, 267, 273, 270, 266, 269]}
+{"global_step": 260, "block_id": 4, "inner_step": 4, "curr_pos": 275, "curr_confidence": 0.353515625, "hit": 1, "prev_pos": 274, "prev_topk_positions": [273, 267, 266, 271, 323, 275, 277, 263]}
+{"global_step": 261, "block_id": 4, "inner_step": 5, "curr_pos": 271, "curr_confidence": 0.09228515625, "hit": 1, "prev_pos": 275, "prev_topk_positions": [277, 276, 266, 320, 287, 268, 278, 271]}
+{"global_step": 262, "block_id": 4, "inner_step": 6, "curr_pos": 268, "curr_confidence": 0.10205078125, "hit": 1, "prev_pos": 271, "prev_topk_positions": [270, 269, 273, 277, 263, 268, 289, 320]}
+{"global_step": 263, "block_id": 4, "inner_step": 7, "curr_pos": 267, "curr_confidence": 0.2314453125, "hit": 1, "prev_pos": 268, "prev_topk_positions": [267, 266, 278, 277, 269, 276, 270, 289]}
+{"global_step": 264, "block_id": 4, "inner_step": 8, "curr_pos": 273, "curr_confidence": 0.32421875, "hit": 1, "prev_pos": 267, "prev_topk_positions": [266, 270, 269, 277, 263, 276, 273, 278]}
+{"global_step": 265, "block_id": 4, "inner_step": 9, "curr_pos": 270, "curr_confidence": 0.28125, "hit": 1, "prev_pos": 273, "prev_topk_positions": [263, 276, 277, 266, 270, 278, 269, 287]}
+{"global_step": 266, "block_id": 4, "inner_step": 10, "curr_pos": 269, "curr_confidence": 0.81640625, "hit": 1, "prev_pos": 270, "prev_topk_positions": [269, 263, 266, 276, 277, 282, 287, 323]}
+{"global_step": 267, "block_id": 4, "inner_step": 11, "curr_pos": 278, "curr_confidence": 0.2275390625, "hit": 0, "prev_pos": 269, "prev_topk_positions": [263, 266, 276, 323, 282, 287, 281, 279]}
+{"global_step": 268, "block_id": 4, "inner_step": 12, "curr_pos": 279, "curr_confidence": 0.1904296875, "hit": 1, "prev_pos": 278, "prev_topk_positions": [277, 276, 279, 282, 281, 287, 280, 266]}
+{"global_step": 269, "block_id": 4, "inner_step": 13, "curr_pos": 277, "curr_confidence": 0.1708984375, "hit": 1, "prev_pos": 279, "prev_topk_positions": [280, 281, 287, 276, 282, 277, 283, 266]}
+{"global_step": 270, "block_id": 4, "inner_step": 14, "curr_pos": 276, "curr_confidence": 0.431640625, "hit": 1, "prev_pos": 277, "prev_topk_positions": [276, 266, 281, 280, 322, 263, 289, 283]}
+{"global_step": 271, "block_id": 4, "inner_step": 15, "curr_pos": 281, "curr_confidence": 0.13671875, "hit": 1, "prev_pos": 276, "prev_topk_positions": [266, 280, 263, 281, 283, 282, 289, 284]}
+{"global_step": 272, "block_id": 4, "inner_step": 16, "curr_pos": 282, "curr_confidence": 0.4765625, "hit": 1, "prev_pos": 281, "prev_topk_positions": [280, 266, 284, 283, 289, 285, 263, 282]}
+{"global_step": 273, "block_id": 4, "inner_step": 17, "curr_pos": 283, "curr_confidence": 0.12060546875, "hit": 1, "prev_pos": 282, "prev_topk_positions": [283, 266, 284, 280, 285, 263, 322, 289]}
+{"global_step": 274, "block_id": 4, "inner_step": 18, "curr_pos": 280, "curr_confidence": 0.251953125, "hit": 1, "prev_pos": 283, "prev_topk_positions": [266, 284, 263, 280, 286, 285, 289, 287]}
+{"global_step": 275, "block_id": 4, "inner_step": 19, "curr_pos": 266, "curr_confidence": 0.6015625, "hit": 1, "prev_pos": 280, "prev_topk_positions": [263, 266, 284, 285, 286, 291, 287, 288]}
+{"global_step": 276, "block_id": 4, "inner_step": 20, "curr_pos": 263, "curr_confidence": 0.6640625, "hit": 1, "prev_pos": 266, "prev_topk_positions": [263, 286, 284, 285, 314, 288, 300, 298]}
+{"global_step": 277, "block_id": 4, "inner_step": 21, "curr_pos": 284, "curr_confidence": 0.265625, "hit": 1, "prev_pos": 263, "prev_topk_positions": [284, 285, 286, 314, 322, 289, 304, 311]}
+{"global_step": 278, "block_id": 4, "inner_step": 22, "curr_pos": 285, "curr_confidence": 0.447265625, "hit": 1, "prev_pos": 284, "prev_topk_positions": [285, 286, 287, 289, 288, 294, 290, 291]}
+{"global_step": 279, "block_id": 4, "inner_step": 23, "curr_pos": 286, "curr_confidence": 0.26953125, "hit": 1, "prev_pos": 285, "prev_topk_positions": [286, 287, 288, 289, 290, 292, 291, 294]}
+{"global_step": 280, "block_id": 4, "inner_step": 24, "curr_pos": 287, "curr_confidence": 0.46875, "hit": 1, "prev_pos": 286, "prev_topk_positions": [287, 288, 289, 291, 290, 292, 294, 293]}
+{"global_step": 281, "block_id": 4, "inner_step": 25, "curr_pos": 289, "curr_confidence": 0.349609375, "hit": 1, "prev_pos": 287, "prev_topk_positions": [288, 289, 290, 291, 292, 293, 294, 298]}
+{"global_step": 282, "block_id": 4, "inner_step": 26, "curr_pos": 288, "curr_confidence": 0.5625, "hit": 1, "prev_pos": 289, "prev_topk_positions": [288, 290, 293, 292, 291, 294, 295, 298]}
+{"global_step": 283, "block_id": 4, "inner_step": 27, "curr_pos": 290, "curr_confidence": 0.43359375, "hit": 1, "prev_pos": 288, "prev_topk_positions": [292, 291, 298, 293, 290, 305, 297, 295]}
+{"global_step": 284, "block_id": 4, "inner_step": 28, "curr_pos": 291, "curr_confidence": 0.828125, "hit": 1, "prev_pos": 290, "prev_topk_positions": [291, 294, 293, 292, 295, 298, 296, 301]}
+{"global_step": 285, "block_id": 4, "inner_step": 29, "curr_pos": 292, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 291, "prev_topk_positions": [294, 293, 295, 296, 292, 297, 298, 301]}
+{"global_step": 286, "block_id": 4, "inner_step": 30, "curr_pos": 297, "curr_confidence": 0.890625, "hit": 1, "prev_pos": 292, "prev_topk_positions": [297, 293, 296, 295, 298, 294, 299, 303]}
+{"global_step": 287, "block_id": 4, "inner_step": 31, "curr_pos": 293, "curr_confidence": 1.0, "hit": 1, "prev_pos": 297, "prev_topk_positions": [296, 295, 293, 294, 298, 299, 301, 303]}
+{"global_step": 288, "block_id": 4, "inner_step": 32, "curr_pos": 294, "curr_confidence": 1.0, "hit": 1, "prev_pos": 293, "prev_topk_positions": [298, 295, 294, 296, 299, 300, 302, 301]}
+{"global_step": 289, "block_id": 4, "inner_step": 33, "curr_pos": 296, "curr_confidence": 1.0, "hit": 1, "prev_pos": 294, "prev_topk_positions": [295, 296, 298, 299, 300, 301, 302, 305]}
+{"global_step": 290, "block_id": 4, "inner_step": 34, "curr_pos": 295, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 296, "prev_topk_positions": [295, 298, 299, 300, 301, 302, 305, 307]}
+{"global_step": 291, "block_id": 4, "inner_step": 35, "curr_pos": 298, "curr_confidence": 0.96875, "hit": 1, "prev_pos": 295, "prev_topk_positions": [298, 299, 300, 301, 302, 304, 305, 321]}
+{"global_step": 292, "block_id": 4, "inner_step": 36, "curr_pos": 299, "curr_confidence": 0.251953125, "hit": 1, "prev_pos": 298, "prev_topk_positions": [299, 300, 302, 301, 303, 304, 307, 305]}
+{"global_step": 293, "block_id": 4, "inner_step": 37, "curr_pos": 302, "curr_confidence": 0.3828125, "hit": 1, "prev_pos": 299, "prev_topk_positions": [300, 301, 302, 303, 304, 308, 307, 305]}
+{"global_step": 294, "block_id": 4, "inner_step": 38, "curr_pos": 300, "curr_confidence": 0.8359375, "hit": 1, "prev_pos": 302, "prev_topk_positions": [300, 301, 303, 304, 306, 307, 305, 308]}
+{"global_step": 295, "block_id": 4, "inner_step": 39, "curr_pos": 301, "curr_confidence": 0.75, "hit": 1, "prev_pos": 300, "prev_topk_positions": [301, 303, 304, 305, 309, 311, 306, 312]}
+{"global_step": 296, "block_id": 4, "inner_step": 40, "curr_pos": 303, "curr_confidence": 0.6875, "hit": 1, "prev_pos": 301, "prev_topk_positions": [303, 304, 305, 307, 306, 309, 310, 312]}
+{"global_step": 297, "block_id": 4, "inner_step": 41, "curr_pos": 307, "curr_confidence": 0.25390625, "hit": 1, "prev_pos": 303, "prev_topk_positions": [304, 305, 306, 307, 308, 309, 310, 311]}
+{"global_step": 298, "block_id": 4, "inner_step": 42, "curr_pos": 308, "curr_confidence": 0.890625, "hit": 1, "prev_pos": 307, "prev_topk_positions": [304, 305, 306, 309, 310, 312, 308, 311]}
+{"global_step": 299, "block_id": 4, "inner_step": 43, "curr_pos": 305, "curr_confidence": 1.0, "hit": 1, "prev_pos": 308, "prev_topk_positions": [306, 309, 304, 305, 311, 310, 312, 313]}
+{"global_step": 300, "block_id": 4, "inner_step": 44, "curr_pos": 304, "curr_confidence": 0.8828125, "hit": 1, "prev_pos": 305, "prev_topk_positions": [304, 309, 310, 306, 311, 312, 313, 314]}
+{"global_step": 301, "block_id": 4, "inner_step": 45, "curr_pos": 311, "curr_confidence": 0.953125, "hit": 1, "prev_pos": 304, "prev_topk_positions": [306, 309, 313, 310, 312, 311, 315, 314]}
+{"global_step": 302, "block_id": 4, "inner_step": 46, "curr_pos": 312, "curr_confidence": 0.8515625, "hit": 1, "prev_pos": 311, "prev_topk_positions": [310, 309, 312, 313, 306, 316, 314, 315]}
+{"global_step": 303, "block_id": 4, "inner_step": 47, "curr_pos": 314, "curr_confidence": 0.86328125, "hit": 1, "prev_pos": 312, "prev_topk_positions": [313, 314, 310, 309, 315, 316, 306, 317]}
+{"global_step": 304, "block_id": 4, "inner_step": 48, "curr_pos": 315, "curr_confidence": 0.7265625, "hit": 1, "prev_pos": 314, "prev_topk_positions": [313, 315, 310, 316, 309, 317, 318, 306]}
+{"global_step": 305, "block_id": 4, "inner_step": 49, "curr_pos": 316, "curr_confidence": 0.8828125, "hit": 1, "prev_pos": 315, "prev_topk_positions": [316, 317, 318, 313, 324, 309, 322, 306]}
+{"global_step": 306, "block_id": 4, "inner_step": 50, "curr_pos": 313, "curr_confidence": 0.59375, "hit": 1, "prev_pos": 316, "prev_topk_positions": [317, 318, 313, 319, 320, 321, 306, 310]}
+{"global_step": 307, "block_id": 4, "inner_step": 51, "curr_pos": 310, "curr_confidence": 0.7109375, "hit": 1, "prev_pos": 313, "prev_topk_positions": [310, 309, 317, 306, 318, 321, 319, 322]}
+{"global_step": 308, "block_id": 4, "inner_step": 52, "curr_pos": 309, "curr_confidence": 0.65625, "hit": 1, "prev_pos": 310, "prev_topk_positions": [309, 306, 317, 318, 319, 321, 320, 322]}
+{"global_step": 309, "block_id": 4, "inner_step": 53, "curr_pos": 306, "curr_confidence": 0.9296875, "hit": 1, "prev_pos": 309, "prev_topk_positions": [306, 317, 318, 319, 321, 320, 324, 322]}
+{"global_step": 310, "block_id": 4, "inner_step": 54, "curr_pos": 317, "curr_confidence": 0.37890625, "hit": 1, "prev_pos": 306, "prev_topk_positions": [317, 318, 319, 321, 320, 323, 322, 324]}
+{"global_step": 311, "block_id": 4, "inner_step": 55, "curr_pos": 320, "curr_confidence": 0.515625, "hit": 1, "prev_pos": 317, "prev_topk_positions": [318, 319, 321, 320, 322, 323, 324, 325]}
+{"global_step": 312, "block_id": 4, "inner_step": 56, "curr_pos": 319, "curr_confidence": 0.9609375, "hit": 1, "prev_pos": 320, "prev_topk_positions": [319, 318, 321, 323, 322, 326, 325, 324]}
+{"global_step": 313, "block_id": 4, "inner_step": 57, "curr_pos": 318, "curr_confidence": 0.859375, "hit": 1, "prev_pos": 319, "prev_topk_positions": [318, 322, 321, 324, 323, 325, 326]}
+{"global_step": 314, "block_id": 4, "inner_step": 58, "curr_pos": 321, "curr_confidence": 0.90234375, "hit": 1, "prev_pos": 318, "prev_topk_positions": [321, 323, 324, 322, 325, 326]}
+{"global_step": 315, "block_id": 4, "inner_step": 59, "curr_pos": 322, "curr_confidence": 0.267578125, "hit": 1, "prev_pos": 321, "prev_topk_positions": [322, 323, 324, 325, 326]}
+{"global_step": 316, "block_id": 4, "inner_step": 60, "curr_pos": 323, "curr_confidence": 0.416015625, "hit": 1, "prev_pos": 322, "prev_topk_positions": [323, 324, 325, 326]}
+{"global_step": 317, "block_id": 4, "inner_step": 61, "curr_pos": 324, "curr_confidence": 0.5390625, "hit": 1, "prev_pos": 323, "prev_topk_positions": [324, 325, 326]}
+{"global_step": 318, "block_id": 4, "inner_step": 62, "curr_pos": 325, "curr_confidence": 1.0, "hit": 1, "prev_pos": 324, "prev_topk_positions": [325, 326]}
+{"global_step": 319, "block_id": 4, "inner_step": 63, "curr_pos": 326, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 325, "prev_topk_positions": [326]}
+{"global_step": 320, "block_id": 5, "inner_step": 0, "curr_pos": 327, "curr_confidence": 0.98828125, "hit": null, "prev_pos": 326, "prev_topk_positions": []}
+{"global_step": 321, "block_id": 5, "inner_step": 1, "curr_pos": 329, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 327, "prev_topk_positions": [330, 331, 328, 329, 334, 333, 332, 340]}
+{"global_step": 322, "block_id": 5, "inner_step": 2, "curr_pos": 328, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 329, "prev_topk_positions": [332, 328, 331, 333, 330, 336, 346, 334]}
+{"global_step": 323, "block_id": 5, "inner_step": 3, "curr_pos": 330, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 328, "prev_topk_positions": [330, 333, 331, 332, 335, 334, 336, 338]}
+{"global_step": 324, "block_id": 5, "inner_step": 4, "curr_pos": 331, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 330, "prev_topk_positions": [333, 331, 334, 332, 337, 335, 345, 342]}
+{"global_step": 325, "block_id": 5, "inner_step": 5, "curr_pos": 332, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 331, "prev_topk_positions": [332, 333, 334, 335, 345, 341, 338, 350]}
+{"global_step": 326, "block_id": 5, "inner_step": 6, "curr_pos": 333, "curr_confidence": 0.94921875, "hit": 1, "prev_pos": 332, "prev_topk_positions": [333, 334, 342, 335, 346, 352, 339, 336]}
+{"global_step": 327, "block_id": 5, "inner_step": 7, "curr_pos": 337, "curr_confidence": 0.82421875, "hit": 1, "prev_pos": 333, "prev_topk_positions": [334, 335, 336, 337, 339, 342, 369, 343]}
+{"global_step": 328, "block_id": 5, "inner_step": 8, "curr_pos": 334, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 337, "prev_topk_positions": [336, 334, 335, 338, 339, 374, 342, 343]}
+{"global_step": 329, "block_id": 5, "inner_step": 9, "curr_pos": 336, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 334, "prev_topk_positions": [335, 336, 370, 343, 355, 354, 345, 344]}
+{"global_step": 330, "block_id": 5, "inner_step": 10, "curr_pos": 338, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 336, "prev_topk_positions": [335, 339, 342, 345, 343, 338, 346, 372]}
+{"global_step": 331, "block_id": 5, "inner_step": 11, "curr_pos": 335, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 338, "prev_topk_positions": [335, 339, 345, 340, 341, 342, 344, 359]}
+{"global_step": 332, "block_id": 5, "inner_step": 12, "curr_pos": 340, "curr_confidence": 0.96875, "hit": 1, "prev_pos": 335, "prev_topk_positions": [345, 339, 371, 356, 344, 343, 340, 342]}
+{"global_step": 333, "block_id": 5, "inner_step": 13, "curr_pos": 339, "curr_confidence": 1.0, "hit": 1, "prev_pos": 340, "prev_topk_positions": [339, 343, 345, 344, 342, 341, 348, 355]}
+{"global_step": 334, "block_id": 5, "inner_step": 14, "curr_pos": 342, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 339, "prev_topk_positions": [342, 344, 343, 341, 348, 346, 345, 350]}
+{"global_step": 335, "block_id": 5, "inner_step": 15, "curr_pos": 341, "curr_confidence": 1.0, "hit": 1, "prev_pos": 342, "prev_topk_positions": [341, 343, 344, 345, 346, 356, 371, 347]}
+{"global_step": 336, "block_id": 5, "inner_step": 16, "curr_pos": 346, "curr_confidence": 0.98046875, "hit": 1, "prev_pos": 341, "prev_topk_positions": [344, 343, 345, 355, 350, 346, 356, 348]}
+{"global_step": 337, "block_id": 5, "inner_step": 17, "curr_pos": 343, "curr_confidence": 1.0, "hit": 1, "prev_pos": 346, "prev_topk_positions": [345, 351, 356, 344, 343, 347, 350, 372]}
+{"global_step": 338, "block_id": 5, "inner_step": 18, "curr_pos": 344, "curr_confidence": 1.0, "hit": 1, "prev_pos": 343, "prev_topk_positions": [344, 348, 347, 353, 354, 345, 370, 356]}
+{"global_step": 339, "block_id": 5, "inner_step": 19, "curr_pos": 345, "curr_confidence": 1.0, "hit": 1, "prev_pos": 344, "prev_topk_positions": [348, 349, 345, 353, 347, 370, 354, 372]}
+{"global_step": 340, "block_id": 5, "inner_step": 20, "curr_pos": 347, "curr_confidence": 1.0, "hit": 1, "prev_pos": 345, "prev_topk_positions": [350, 349, 348, 359, 347, 372, 371, 354]}
+{"global_step": 341, "block_id": 5, "inner_step": 21, "curr_pos": 351, "curr_confidence": 1.0, "hit": 0, "prev_pos": 347, "prev_topk_positions": [352, 348, 353, 349, 354, 361, 370, 350]}
+{"global_step": 342, "block_id": 5, "inner_step": 22, "curr_pos": 348, "curr_confidence": 1.0, "hit": 1, "prev_pos": 351, "prev_topk_positions": [350, 349, 352, 348, 354, 353, 356, 355]}
+{"global_step": 343, "block_id": 5, "inner_step": 23, "curr_pos": 349, "curr_confidence": 1.0, "hit": 1, "prev_pos": 348, "prev_topk_positions": [353, 352, 349, 354, 350, 371, 370, 361]}
+{"global_step": 344, "block_id": 5, "inner_step": 24, "curr_pos": 350, "curr_confidence": 1.0, "hit": 1, "prev_pos": 349, "prev_topk_positions": [353, 354, 350, 352, 371, 370, 355, 372]}
+{"global_step": 345, "block_id": 5, "inner_step": 25, "curr_pos": 352, "curr_confidence": 1.0, "hit": 1, "prev_pos": 350, "prev_topk_positions": [353, 352, 354, 371, 355, 364, 372, 370]}
+{"global_step": 346, "block_id": 5, "inner_step": 26, "curr_pos": 353, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 352, "prev_topk_positions": [353, 354, 370, 369, 371, 361, 357, 374]}
+{"global_step": 347, "block_id": 5, "inner_step": 27, "curr_pos": 358, "curr_confidence": 0.97265625, "hit": 0, "prev_pos": 353, "prev_topk_positions": [354, 355, 370, 356, 371, 369, 357, 365]}
+{"global_step": 348, "block_id": 5, "inner_step": 28, "curr_pos": 354, "curr_confidence": 1.0, "hit": 1, "prev_pos": 358, "prev_topk_positions": [357, 356, 355, 359, 361, 354, 371, 370]}
+{"global_step": 349, "block_id": 5, "inner_step": 29, "curr_pos": 355, "curr_confidence": 1.0, "hit": 1, "prev_pos": 354, "prev_topk_positions": [355, 357, 356, 371, 370, 369, 374, 372]}
+{"global_step": 350, "block_id": 5, "inner_step": 30, "curr_pos": 356, "curr_confidence": 1.0, "hit": 1, "prev_pos": 355, "prev_topk_positions": [356, 357, 371, 370, 382, 359, 369, 364]}
+{"global_step": 351, "block_id": 5, "inner_step": 31, "curr_pos": 357, "curr_confidence": 1.0, "hit": 1, "prev_pos": 356, "prev_topk_positions": [357, 371, 359, 365, 360, 369, 370, 368]}
+{"global_step": 352, "block_id": 5, "inner_step": 32, "curr_pos": 359, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 357, "prev_topk_positions": [369, 370, 371, 359, 360, 374, 368, 361]}
+{"global_step": 353, "block_id": 5, "inner_step": 33, "curr_pos": 360, "curr_confidence": 1.0, "hit": 1, "prev_pos": 359, "prev_topk_positions": [360, 371, 365, 364, 368, 361, 370, 372]}
+{"global_step": 354, "block_id": 5, "inner_step": 34, "curr_pos": 361, "curr_confidence": 1.0, "hit": 1, "prev_pos": 360, "prev_topk_positions": [365, 362, 369, 374, 361, 371, 363, 364]}
+{"global_step": 355, "block_id": 5, "inner_step": 35, "curr_pos": 362, "curr_confidence": 1.0, "hit": 1, "prev_pos": 361, "prev_topk_positions": [362, 364, 363, 365, 370, 369, 382, 371]}
+{"global_step": 356, "block_id": 5, "inner_step": 36, "curr_pos": 363, "curr_confidence": 1.0, "hit": 1, "prev_pos": 362, "prev_topk_positions": [365, 363, 364, 371, 369, 370, 366, 374]}
+{"global_step": 357, "block_id": 5, "inner_step": 37, "curr_pos": 364, "curr_confidence": 1.0, "hit": 1, "prev_pos": 363, "prev_topk_positions": [364, 366, 365, 369, 370, 371, 368, 372]}
+{"global_step": 358, "block_id": 5, "inner_step": 38, "curr_pos": 365, "curr_confidence": 1.0, "hit": 1, "prev_pos": 364, "prev_topk_positions": [365, 369, 366, 368, 367, 371, 370, 374]}
+{"global_step": 359, "block_id": 5, "inner_step": 39, "curr_pos": 366, "curr_confidence": 1.0, "hit": 1, "prev_pos": 365, "prev_topk_positions": [369, 366, 368, 367, 370, 371, 374, 372]}
+{"global_step": 360, "block_id": 5, "inner_step": 40, "curr_pos": 367, "curr_confidence": 1.0, "hit": 1, "prev_pos": 366, "prev_topk_positions": [369, 370, 368, 367, 371, 372, 374, 373]}
+{"global_step": 361, "block_id": 5, "inner_step": 41, "curr_pos": 368, "curr_confidence": 1.0, "hit": 1, "prev_pos": 367, "prev_topk_positions": [369, 370, 368, 371, 374, 372, 377, 373]}
+{"global_step": 362, "block_id": 5, "inner_step": 42, "curr_pos": 369, "curr_confidence": 0.984375, "hit": 1, "prev_pos": 368, "prev_topk_positions": [369, 370, 371, 372, 374, 377, 373, 379]}
+{"global_step": 363, "block_id": 5, "inner_step": 43, "curr_pos": 370, "curr_confidence": 0.66796875, "hit": 1, "prev_pos": 369, "prev_topk_positions": [370, 372, 371, 374, 373, 377, 375, 379]}
+{"global_step": 364, "block_id": 5, "inner_step": 44, "curr_pos": 371, "curr_confidence": 0.8828125, "hit": 1, "prev_pos": 370, "prev_topk_positions": [371, 372, 374, 373, 375, 377, 376, 386]}
+{"global_step": 365, "block_id": 5, "inner_step": 45, "curr_pos": 372, "curr_confidence": 0.5, "hit": 1, "prev_pos": 371, "prev_topk_positions": [372, 373, 375, 389, 382, 374, 379, 377]}
+{"global_step": 366, "block_id": 5, "inner_step": 46, "curr_pos": 375, "curr_confidence": 0.8125, "hit": 1, "prev_pos": 372, "prev_topk_positions": [373, 374, 377, 375, 378, 376, 382, 380]}
+{"global_step": 367, "block_id": 5, "inner_step": 47, "curr_pos": 374, "curr_confidence": 0.9921875, "hit": 1, "prev_pos": 375, "prev_topk_positions": [374, 373, 376, 378, 381, 377, 388, 380]}
+{"global_step": 368, "block_id": 5, "inner_step": 48, "curr_pos": 373, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 374, "prev_topk_positions": [373, 377, 376, 381, 380, 384, 379, 378]}
+{"global_step": 369, "block_id": 5, "inner_step": 49, "curr_pos": 376, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 373, "prev_topk_positions": [376, 390, 379, 377, 380, 378, 381, 384]}
+{"global_step": 370, "block_id": 5, "inner_step": 50, "curr_pos": 379, "curr_confidence": 0.96875, "hit": 1, "prev_pos": 376, "prev_topk_positions": [377, 378, 379, 382, 381, 386, 380, 383]}
+{"global_step": 371, "block_id": 5, "inner_step": 51, "curr_pos": 377, "curr_confidence": 1.0, "hit": 1, "prev_pos": 379, "prev_topk_positions": [378, 377, 380, 383, 381, 382, 390, 384]}
+{"global_step": 372, "block_id": 5, "inner_step": 52, "curr_pos": 378, "curr_confidence": 1.0, "hit": 1, "prev_pos": 377, "prev_topk_positions": [380, 378, 388, 381, 387, 390, 384, 389]}
+{"global_step": 373, "block_id": 5, "inner_step": 53, "curr_pos": 380, "curr_confidence": 1.0, "hit": 1, "prev_pos": 378, "prev_topk_positions": [381, 380, 382, 388, 385, 389, 390, 384]}
+{"global_step": 374, "block_id": 5, "inner_step": 54, "curr_pos": 381, "curr_confidence": 1.0, "hit": 1, "prev_pos": 380, "prev_topk_positions": [381, 384, 383, 382, 387, 390, 385, 388]}
+{"global_step": 375, "block_id": 5, "inner_step": 55, "curr_pos": 382, "curr_confidence": 1.0, "hit": 1, "prev_pos": 381, "prev_topk_positions": [388, 385, 382, 384, 383, 387, 390, 389]}
+{"global_step": 376, "block_id": 5, "inner_step": 56, "curr_pos": 383, "curr_confidence": 1.0, "hit": 1, "prev_pos": 382, "prev_topk_positions": [385, 388, 389, 384, 383, 386, 387, 390]}
+{"global_step": 377, "block_id": 5, "inner_step": 57, "curr_pos": 384, "curr_confidence": 1.0, "hit": 1, "prev_pos": 383, "prev_topk_positions": [384, 390, 389, 388, 385, 386, 387]}
+{"global_step": 378, "block_id": 5, "inner_step": 58, "curr_pos": 385, "curr_confidence": 1.0, "hit": 1, "prev_pos": 384, "prev_topk_positions": [385, 387, 388, 386, 390, 389]}
+{"global_step": 379, "block_id": 5, "inner_step": 59, "curr_pos": 386, "curr_confidence": 1.0, "hit": 1, "prev_pos": 385, "prev_topk_positions": [388, 386, 387, 389, 390]}
+{"global_step": 380, "block_id": 5, "inner_step": 60, "curr_pos": 387, "curr_confidence": 1.0, "hit": 1, "prev_pos": 386, "prev_topk_positions": [388, 387, 389, 390]}
+{"global_step": 381, "block_id": 5, "inner_step": 61, "curr_pos": 388, "curr_confidence": 1.0, "hit": 1, "prev_pos": 387, "prev_topk_positions": [388, 389, 390]}
+{"global_step": 382, "block_id": 5, "inner_step": 62, "curr_pos": 389, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 388, "prev_topk_positions": [389, 390]}
+{"global_step": 383, "block_id": 5, "inner_step": 63, "curr_pos": 390, "curr_confidence": 1.0, "hit": 1, "prev_pos": 389, "prev_topk_positions": [390]}
+{"global_step": 384, "block_id": 6, "inner_step": 0, "curr_pos": 391, "curr_confidence": 1.0, "hit": null, "prev_pos": 390, "prev_topk_positions": []}
+{"global_step": 385, "block_id": 6, "inner_step": 1, "curr_pos": 392, "curr_confidence": 1.0, "hit": 1, "prev_pos": 391, "prev_topk_positions": [392, 446, 428, 445, 442, 397, 429, 393]}
+{"global_step": 386, "block_id": 6, "inner_step": 2, "curr_pos": 393, "curr_confidence": 1.0, "hit": 1, "prev_pos": 392, "prev_topk_positions": [393, 447, 394, 428, 446, 429, 430, 448]}
+{"global_step": 387, "block_id": 6, "inner_step": 3, "curr_pos": 394, "curr_confidence": 1.0, "hit": 1, "prev_pos": 393, "prev_topk_positions": [448, 394, 431, 397, 428, 395, 403, 442]}
+{"global_step": 388, "block_id": 6, "inner_step": 4, "curr_pos": 395, "curr_confidence": 1.0, "hit": 1, "prev_pos": 394, "prev_topk_positions": [397, 395, 399, 449, 442, 432, 435, 448]}
+{"global_step": 389, "block_id": 6, "inner_step": 5, "curr_pos": 396, "curr_confidence": 1.0, "hit": 0, "prev_pos": 395, "prev_topk_positions": [450, 399, 398, 397, 433, 404, 400, 405]}
+{"global_step": 390, "block_id": 6, "inner_step": 6, "curr_pos": 397, "curr_confidence": 1.0, "hit": 1, "prev_pos": 396, "prev_topk_positions": [397, 451, 398, 399, 452, 434, 400, 450]}
+{"global_step": 391, "block_id": 6, "inner_step": 7, "curr_pos": 398, "curr_confidence": 1.0, "hit": 1, "prev_pos": 397, "prev_topk_positions": [398, 452, 399, 442, 451, 435, 402, 400]}
+{"global_step": 392, "block_id": 6, "inner_step": 8, "curr_pos": 399, "curr_confidence": 1.0, "hit": 1, "prev_pos": 398, "prev_topk_positions": [399, 403, 452, 453, 402, 425, 408, 400]}
+{"global_step": 393, "block_id": 6, "inner_step": 9, "curr_pos": 400, "curr_confidence": 1.0, "hit": 1, "prev_pos": 399, "prev_topk_positions": [404, 400, 403, 454, 453, 409, 408, 425]}
+{"global_step": 394, "block_id": 6, "inner_step": 10, "curr_pos": 401, "curr_confidence": 1.0, "hit": 1, "prev_pos": 400, "prev_topk_positions": [405, 401, 414, 404, 403, 445, 454, 428]}
+{"global_step": 395, "block_id": 6, "inner_step": 11, "curr_pos": 402, "curr_confidence": 1.0, "hit": 1, "prev_pos": 401, "prev_topk_positions": [406, 402, 403, 405, 404, 415, 428, 429]}
+{"global_step": 396, "block_id": 6, "inner_step": 12, "curr_pos": 403, "curr_confidence": 1.0, "hit": 1, "prev_pos": 402, "prev_topk_positions": [403, 407, 416, 404, 408, 425, 442, 412]}
+{"global_step": 397, "block_id": 6, "inner_step": 13, "curr_pos": 404, "curr_confidence": 1.0, "hit": 1, "prev_pos": 403, "prev_topk_positions": [404, 408, 407, 405, 426, 425, 417, 442]}
+{"global_step": 398, "block_id": 6, "inner_step": 14, "curr_pos": 405, "curr_confidence": 1.0, "hit": 1, "prev_pos": 404, "prev_topk_positions": [408, 405, 409, 407, 425, 454, 426, 432]}
+{"global_step": 399, "block_id": 6, "inner_step": 15, "curr_pos": 406, "curr_confidence": 1.0, "hit": 1, "prev_pos": 405, "prev_topk_positions": [406, 408, 409, 407, 426, 419, 410, 421]}
+{"global_step": 400, "block_id": 6, "inner_step": 16, "curr_pos": 407, "curr_confidence": 1.0, "hit": 1, "prev_pos": 406, "prev_topk_positions": [407, 408, 409, 442, 410, 441, 424, 419]}
+{"global_step": 401, "block_id": 6, "inner_step": 17, "curr_pos": 408, "curr_confidence": 1.0, "hit": 1, "prev_pos": 407, "prev_topk_positions": [408, 442, 424, 425, 409, 411, 412, 423]}
+{"global_step": 402, "block_id": 6, "inner_step": 18, "curr_pos": 409, "curr_confidence": 1.0, "hit": 1, "prev_pos": 408, "prev_topk_positions": [409, 425, 424, 411, 412, 420, 410, 442]}
+{"global_step": 403, "block_id": 6, "inner_step": 19, "curr_pos": 410, "curr_confidence": 1.0, "hit": 1, "prev_pos": 409, "prev_topk_positions": [425, 412, 410, 411, 426, 413, 424, 421]}
+{"global_step": 404, "block_id": 6, "inner_step": 20, "curr_pos": 411, "curr_confidence": 1.0, "hit": 1, "prev_pos": 410, "prev_topk_positions": [411, 412, 413, 414, 426, 425, 422, 419]}
+{"global_step": 405, "block_id": 6, "inner_step": 21, "curr_pos": 412, "curr_confidence": 1.0, "hit": 1, "prev_pos": 411, "prev_topk_positions": [412, 413, 414, 415, 424, 428, 420, 446]}
+{"global_step": 406, "block_id": 6, "inner_step": 22, "curr_pos": 413, "curr_confidence": 1.0, "hit": 1, "prev_pos": 412, "prev_topk_positions": [413, 425, 424, 414, 415, 416, 428, 421]}
+{"global_step": 407, "block_id": 6, "inner_step": 23, "curr_pos": 415, "curr_confidence": 1.0, "hit": 0, "prev_pos": 413, "prev_topk_positions": [414, 425, 426, 416, 430, 424, 417, 428]}
+{"global_step": 408, "block_id": 6, "inner_step": 24, "curr_pos": 414, "curr_confidence": 1.0, "hit": 1, "prev_pos": 415, "prev_topk_positions": [414, 420, 416, 424, 417, 419, 428, 426]}
+{"global_step": 409, "block_id": 6, "inner_step": 25, "curr_pos": 416, "curr_confidence": 1.0, "hit": 1, "prev_pos": 414, "prev_topk_positions": [417, 416, 419, 426, 418, 428, 425, 424]}
+{"global_step": 410, "block_id": 6, "inner_step": 26, "curr_pos": 417, "curr_confidence": 1.0, "hit": 1, "prev_pos": 416, "prev_topk_positions": [417, 419, 418, 420, 425, 424, 428, 430]}
+{"global_step": 411, "block_id": 6, "inner_step": 27, "curr_pos": 418, "curr_confidence": 1.0, "hit": 1, "prev_pos": 417, "prev_topk_positions": [420, 418, 419, 421, 424, 425, 428, 426]}
+{"global_step": 412, "block_id": 6, "inner_step": 28, "curr_pos": 419, "curr_confidence": 1.0, "hit": 1, "prev_pos": 418, "prev_topk_positions": [419, 421, 425, 420, 424, 426, 422, 432]}
+{"global_step": 413, "block_id": 6, "inner_step": 29, "curr_pos": 420, "curr_confidence": 1.0, "hit": 1, "prev_pos": 419, "prev_topk_positions": [420, 421, 424, 422, 426, 423, 425, 428]}
+{"global_step": 414, "block_id": 6, "inner_step": 30, "curr_pos": 421, "curr_confidence": 1.0, "hit": 1, "prev_pos": 420, "prev_topk_positions": [421, 424, 423, 428, 425, 422, 426, 435]}
+{"global_step": 415, "block_id": 6, "inner_step": 31, "curr_pos": 422, "curr_confidence": 1.0, "hit": 1, "prev_pos": 421, "prev_topk_positions": [424, 425, 422, 423, 428, 426, 427, 443]}
+{"global_step": 416, "block_id": 6, "inner_step": 32, "curr_pos": 423, "curr_confidence": 1.0, "hit": 1, "prev_pos": 422, "prev_topk_positions": [424, 423, 425, 426, 430, 427, 428, 437]}
+{"global_step": 417, "block_id": 6, "inner_step": 33, "curr_pos": 424, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 423, "prev_topk_positions": [424, 426, 425, 428, 427, 431, 430, 442]}
+{"global_step": 418, "block_id": 6, "inner_step": 34, "curr_pos": 425, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 424, "prev_topk_positions": [425, 426, 427, 428, 442, 432, 429, 431]}
+{"global_step": 419, "block_id": 6, "inner_step": 35, "curr_pos": 426, "curr_confidence": 0.98828125, "hit": 1, "prev_pos": 425, "prev_topk_positions": [426, 430, 427, 428, 443, 433, 429, 453]}
+{"global_step": 420, "block_id": 6, "inner_step": 36, "curr_pos": 441, "curr_confidence": 0.984375, "hit": 0, "prev_pos": 426, "prev_topk_positions": [427, 428, 430, 429, 432, 445, 431, 444]}
+{"global_step": 421, "block_id": 6, "inner_step": 37, "curr_pos": 440, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 441, "prev_topk_positions": [440, 442, 443, 431, 438, 439, 434, 437]}
+{"global_step": 422, "block_id": 6, "inner_step": 38, "curr_pos": 428, "curr_confidence": 1.0, "hit": 0, "prev_pos": 440, "prev_topk_positions": [439, 443, 429, 436, 437, 442, 433, 444]}
+{"global_step": 423, "block_id": 6, "inner_step": 39, "curr_pos": 427, "curr_confidence": 1.0, "hit": 1, "prev_pos": 428, "prev_topk_positions": [427, 429, 445, 431, 432, 430, 444, 446]}
+{"global_step": 424, "block_id": 6, "inner_step": 40, "curr_pos": 429, "curr_confidence": 1.0, "hit": 1, "prev_pos": 427, "prev_topk_positions": [429, 444, 430, 432, 445, 443, 431, 446]}
+{"global_step": 425, "block_id": 6, "inner_step": 41, "curr_pos": 430, "curr_confidence": 1.0, "hit": 1, "prev_pos": 429, "prev_topk_positions": [430, 446, 432, 431, 435, 433, 443, 449]}
+{"global_step": 426, "block_id": 6, "inner_step": 42, "curr_pos": 431, "curr_confidence": 1.0, "hit": 1, "prev_pos": 430, "prev_topk_positions": [431, 432, 447, 433, 443, 449, 434, 444]}
+{"global_step": 427, "block_id": 6, "inner_step": 43, "curr_pos": 432, "curr_confidence": 1.0, "hit": 1, "prev_pos": 431, "prev_topk_positions": [432, 433, 448, 434, 435, 442, 437, 444]}
+{"global_step": 428, "block_id": 6, "inner_step": 44, "curr_pos": 433, "curr_confidence": 1.0, "hit": 1, "prev_pos": 432, "prev_topk_positions": [435, 433, 443, 434, 439, 449, 442, 444]}
+{"global_step": 429, "block_id": 6, "inner_step": 45, "curr_pos": 434, "curr_confidence": 1.0, "hit": 1, "prev_pos": 433, "prev_topk_positions": [436, 434, 437, 435, 444, 443, 450, 449]}
+{"global_step": 430, "block_id": 6, "inner_step": 46, "curr_pos": 435, "curr_confidence": 1.0, "hit": 1, "prev_pos": 434, "prev_topk_positions": [435, 437, 436, 438, 444, 451, 445, 439]}
+{"global_step": 431, "block_id": 6, "inner_step": 47, "curr_pos": 436, "curr_confidence": 1.0, "hit": 1, "prev_pos": 435, "prev_topk_positions": [436, 439, 438, 437, 442, 452, 449, 443]}
+{"global_step": 432, "block_id": 6, "inner_step": 48, "curr_pos": 437, "curr_confidence": 1.0, "hit": 1, "prev_pos": 436, "prev_topk_positions": [437, 443, 439, 438, 442, 452, 453, 447]}
+{"global_step": 433, "block_id": 6, "inner_step": 49, "curr_pos": 438, "curr_confidence": 1.0, "hit": 1, "prev_pos": 437, "prev_topk_positions": [443, 438, 439, 444, 453, 442, 447, 450]}
+{"global_step": 434, "block_id": 6, "inner_step": 50, "curr_pos": 439, "curr_confidence": 1.0, "hit": 1, "prev_pos": 438, "prev_topk_positions": [439, 443, 444, 442, 445, 449, 453, 448]}
+{"global_step": 435, "block_id": 6, "inner_step": 51, "curr_pos": 442, "curr_confidence": 1.0, "hit": 1, "prev_pos": 439, "prev_topk_positions": [442, 443, 445, 444, 446, 449, 452, 453]}
+{"global_step": 436, "block_id": 6, "inner_step": 52, "curr_pos": 443, "curr_confidence": 1.0, "hit": 1, "prev_pos": 442, "prev_topk_positions": [443, 444, 452, 445, 446, 449, 447, 453]}
+{"global_step": 437, "block_id": 6, "inner_step": 53, "curr_pos": 444, "curr_confidence": 1.0, "hit": 1, "prev_pos": 443, "prev_topk_positions": [444, 453, 447, 452, 445, 446, 450, 454]}
+{"global_step": 438, "block_id": 6, "inner_step": 54, "curr_pos": 445, "curr_confidence": 1.0, "hit": 1, "prev_pos": 444, "prev_topk_positions": [445, 447, 453, 454, 446, 450, 452, 449]}
+{"global_step": 439, "block_id": 6, "inner_step": 55, "curr_pos": 446, "curr_confidence": 1.0, "hit": 1, "prev_pos": 445, "prev_topk_positions": [446, 454, 448, 453, 447, 452, 450, 449]}
+{"global_step": 440, "block_id": 6, "inner_step": 56, "curr_pos": 447, "curr_confidence": 1.0, "hit": 1, "prev_pos": 446, "prev_topk_positions": [447, 452, 448, 449, 453, 450, 454, 451]}
+{"global_step": 441, "block_id": 6, "inner_step": 57, "curr_pos": 448, "curr_confidence": 1.0, "hit": 1, "prev_pos": 447, "prev_topk_positions": [448, 450, 449, 452, 453, 454, 451]}
+{"global_step": 442, "block_id": 6, "inner_step": 58, "curr_pos": 449, "curr_confidence": 1.0, "hit": 1, "prev_pos": 448, "prev_topk_positions": [449, 450, 453, 452, 454, 451]}
+{"global_step": 443, "block_id": 6, "inner_step": 59, "curr_pos": 450, "curr_confidence": 1.0, "hit": 1, "prev_pos": 449, "prev_topk_positions": [452, 450, 453, 454, 451]}
+{"global_step": 444, "block_id": 6, "inner_step": 60, "curr_pos": 451, "curr_confidence": 1.0, "hit": 1, "prev_pos": 450, "prev_topk_positions": [453, 454, 452, 451]}
+{"global_step": 445, "block_id": 6, "inner_step": 61, "curr_pos": 452, "curr_confidence": 1.0, "hit": 1, "prev_pos": 451, "prev_topk_positions": [452, 454, 453]}
+{"global_step": 446, "block_id": 6, "inner_step": 62, "curr_pos": 453, "curr_confidence": 1.0, "hit": 1, "prev_pos": 452, "prev_topk_positions": [453, 454]}
+{"global_step": 447, "block_id": 6, "inner_step": 63, "curr_pos": 454, "curr_confidence": 1.0, "hit": 1, "prev_pos": 453, "prev_topk_positions": [454]}
+{"global_step": 448, "block_id": 7, "inner_step": 0, "curr_pos": 455, "curr_confidence": 1.0, "hit": null, "prev_pos": 454, "prev_topk_positions": []}
+{"global_step": 449, "block_id": 7, "inner_step": 1, "curr_pos": 456, "curr_confidence": 1.0, "hit": 1, "prev_pos": 455, "prev_topk_positions": [510, 460, 469, 515, 456, 511, 459, 500]}
+{"global_step": 450, "block_id": 7, "inner_step": 2, "curr_pos": 457, "curr_confidence": 1.0, "hit": 1, "prev_pos": 456, "prev_topk_positions": [511, 461, 457, 516, 458, 510, 460, 462]}
+{"global_step": 451, "block_id": 7, "inner_step": 3, "curr_pos": 458, "curr_confidence": 1.0, "hit": 1, "prev_pos": 457, "prev_topk_positions": [462, 458, 512, 511, 471, 463, 459, 517]}
+{"global_step": 452, "block_id": 7, "inner_step": 4, "curr_pos": 459, "curr_confidence": 1.0, "hit": 1, "prev_pos": 458, "prev_topk_positions": [463, 459, 462, 513, 512, 480, 460, 471]}
+{"global_step": 453, "block_id": 7, "inner_step": 5, "curr_pos": 460, "curr_confidence": 1.0, "hit": 1, "prev_pos": 459, "prev_topk_positions": [463, 460, 514, 464, 513, 515, 462, 480]}
+{"global_step": 454, "block_id": 7, "inner_step": 6, "curr_pos": 461, "curr_confidence": 1.0, "hit": 1, "prev_pos": 460, "prev_topk_positions": [515, 463, 461, 464, 510, 516, 514, 474]}
+{"global_step": 455, "block_id": 7, "inner_step": 7, "curr_pos": 462, "curr_confidence": 1.0, "hit": 1, "prev_pos": 461, "prev_topk_positions": [516, 462, 463, 511, 515, 464, 465, 497]}
+{"global_step": 456, "block_id": 7, "inner_step": 8, "curr_pos": 463, "curr_confidence": 1.0, "hit": 1, "prev_pos": 462, "prev_topk_positions": [463, 517, 497, 464, 479, 480, 516, 467]}
+{"global_step": 457, "block_id": 7, "inner_step": 9, "curr_pos": 464, "curr_confidence": 1.0, "hit": 1, "prev_pos": 463, "prev_topk_positions": [464, 479, 480, 466, 467, 518, 465, 475]}
+{"global_step": 458, "block_id": 7, "inner_step": 10, "curr_pos": 465, "curr_confidence": 1.0, "hit": 1, "prev_pos": 464, "prev_topk_positions": [467, 465, 466, 480, 479, 468, 476, 481]}
+{"global_step": 459, "block_id": 7, "inner_step": 11, "curr_pos": 466, "curr_confidence": 1.0, "hit": 1, "prev_pos": 465, "prev_topk_positions": [466, 467, 468, 469, 474, 477, 481, 492]}
+{"global_step": 460, "block_id": 7, "inner_step": 12, "curr_pos": 467, "curr_confidence": 1.0, "hit": 1, "prev_pos": 466, "prev_topk_positions": [467, 469, 468, 470, 475, 479, 474, 471]}
+{"global_step": 461, "block_id": 7, "inner_step": 13, "curr_pos": 468, "curr_confidence": 1.0, "hit": 1, "prev_pos": 467, "prev_topk_positions": [468, 479, 469, 471, 480, 470, 476, 475]}
+{"global_step": 462, "block_id": 7, "inner_step": 14, "curr_pos": 469, "curr_confidence": 1.0, "hit": 1, "prev_pos": 468, "prev_topk_positions": [469, 480, 471, 472, 479, 481, 474, 470]}
+{"global_step": 463, "block_id": 7, "inner_step": 15, "curr_pos": 470, "curr_confidence": 1.0, "hit": 1, "prev_pos": 469, "prev_topk_positions": [470, 472, 471, 474, 475, 481, 483, 479]}
+{"global_step": 464, "block_id": 7, "inner_step": 16, "curr_pos": 471, "curr_confidence": 1.0, "hit": 1, "prev_pos": 470, "prev_topk_positions": [471, 475, 472, 479, 473, 474, 476, 511]}
+{"global_step": 465, "block_id": 7, "inner_step": 17, "curr_pos": 472, "curr_confidence": 1.0, "hit": 1, "prev_pos": 471, "prev_topk_positions": [472, 474, 473, 475, 480, 479, 476, 512]}
+{"global_step": 466, "block_id": 7, "inner_step": 18, "curr_pos": 473, "curr_confidence": 1.0, "hit": 1, "prev_pos": 472, "prev_topk_positions": [475, 473, 474, 476, 479, 478, 480, 477]}
+{"global_step": 467, "block_id": 7, "inner_step": 19, "curr_pos": 474, "curr_confidence": 1.0, "hit": 1, "prev_pos": 473, "prev_topk_positions": [474, 476, 475, 479, 480, 477, 478, 514]}
+{"global_step": 468, "block_id": 7, "inner_step": 20, "curr_pos": 475, "curr_confidence": 1.0, "hit": 1, "prev_pos": 474, "prev_topk_positions": [475, 476, 479, 477, 478, 480, 492, 481]}
+{"global_step": 469, "block_id": 7, "inner_step": 21, "curr_pos": 476, "curr_confidence": 1.0, "hit": 1, "prev_pos": 475, "prev_topk_positions": [476, 479, 478, 477, 480, 483, 481, 497]}
+{"global_step": 470, "block_id": 7, "inner_step": 22, "curr_pos": 477, "curr_confidence": 1.0, "hit": 1, "prev_pos": 476, "prev_topk_positions": [479, 480, 477, 478, 481, 483, 482, 495]}
+{"global_step": 471, "block_id": 7, "inner_step": 23, "curr_pos": 478, "curr_confidence": 1.0, "hit": 1, "prev_pos": 477, "prev_topk_positions": [478, 479, 480, 481, 492, 482, 495, 483]}
+{"global_step": 472, "block_id": 7, "inner_step": 24, "curr_pos": 479, "curr_confidence": 1.0, "hit": 1, "prev_pos": 478, "prev_topk_positions": [479, 481, 480, 483, 497, 482, 486, 496]}
+{"global_step": 473, "block_id": 7, "inner_step": 25, "curr_pos": 480, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 479, "prev_topk_positions": [480, 482, 481, 484, 497, 483, 487, 498]}
+{"global_step": 474, "block_id": 7, "inner_step": 26, "curr_pos": 481, "curr_confidence": 0.99609375, "hit": 1, "prev_pos": 480, "prev_topk_positions": [481, 483, 482, 485, 498, 484, 508, 488]}
+{"global_step": 475, "block_id": 7, "inner_step": 27, "curr_pos": 516, "curr_confidence": 0.9921875, "hit": 0, "prev_pos": 481, "prev_topk_positions": [482, 483, 485, 484, 486, 492, 500, 499]}
+{"global_step": 476, "block_id": 7, "inner_step": 28, "curr_pos": 482, "curr_confidence": 1.0, "hit": 0, "prev_pos": 516, "prev_topk_positions": [515, 511, 517, 518, 510, 496, 497, 514]}
+{"global_step": 477, "block_id": 7, "inner_step": 29, "curr_pos": 483, "curr_confidence": 1.0, "hit": 1, "prev_pos": 482, "prev_topk_positions": [483, 484, 488, 487, 486, 485, 498, 499]}
+{"global_step": 478, "block_id": 7, "inner_step": 30, "curr_pos": 484, "curr_confidence": 1.0, "hit": 1, "prev_pos": 483, "prev_topk_positions": [484, 486, 500, 485, 487, 489, 488, 493]}
+{"global_step": 479, "block_id": 7, "inner_step": 31, "curr_pos": 485, "curr_confidence": 1.0, "hit": 1, "prev_pos": 484, "prev_topk_positions": [487, 485, 486, 501, 490, 488, 491, 498]}
+{"global_step": 480, "block_id": 7, "inner_step": 32, "curr_pos": 486, "curr_confidence": 1.0, "hit": 1, "prev_pos": 485, "prev_topk_positions": [486, 487, 502, 488, 495, 491, 498, 496]}
+{"global_step": 481, "block_id": 7, "inner_step": 33, "curr_pos": 487, "curr_confidence": 1.0, "hit": 1, "prev_pos": 486, "prev_topk_positions": [487, 503, 488, 497, 496, 518, 492, 493]}
+{"global_step": 482, "block_id": 7, "inner_step": 34, "curr_pos": 488, "curr_confidence": 1.0, "hit": 1, "prev_pos": 487, "prev_topk_positions": [488, 518, 490, 508, 498, 491, 504, 489]}
+{"global_step": 483, "block_id": 7, "inner_step": 35, "curr_pos": 489, "curr_confidence": 1.0, "hit": 1, "prev_pos": 488, "prev_topk_positions": [491, 489, 492, 490, 498, 508, 495, 518]}
+{"global_step": 484, "block_id": 7, "inner_step": 36, "curr_pos": 490, "curr_confidence": 1.0, "hit": 1, "prev_pos": 489, "prev_topk_positions": [490, 492, 491, 493, 499, 496, 506, 500]}
+{"global_step": 485, "block_id": 7, "inner_step": 37, "curr_pos": 491, "curr_confidence": 1.0, "hit": 1, "prev_pos": 490, "prev_topk_positions": [491, 494, 493, 497, 492, 508, 498, 507]}
+{"global_step": 486, "block_id": 7, "inner_step": 38, "curr_pos": 492, "curr_confidence": 1.0, "hit": 1, "prev_pos": 491, "prev_topk_positions": [495, 498, 494, 508, 492, 493, 497, 496]}
+{"global_step": 487, "block_id": 7, "inner_step": 39, "curr_pos": 493, "curr_confidence": 1.0, "hit": 1, "prev_pos": 492, "prev_topk_positions": [495, 498, 508, 493, 494, 499, 496, 497]}
+{"global_step": 488, "block_id": 7, "inner_step": 40, "curr_pos": 494, "curr_confidence": 1.0, "hit": 1, "prev_pos": 493, "prev_topk_positions": [494, 495, 496, 497, 498, 508, 499, 513]}
+{"global_step": 489, "block_id": 7, "inner_step": 41, "curr_pos": 495, "curr_confidence": 1.0, "hit": 1, "prev_pos": 494, "prev_topk_positions": [497, 495, 498, 508, 496, 499, 513, 507]}
+{"global_step": 490, "block_id": 7, "inner_step": 42, "curr_pos": 496, "curr_confidence": 1.0, "hit": 1, "prev_pos": 495, "prev_topk_positions": [498, 508, 497, 496, 513, 499, 509, 515]}
+{"global_step": 491, "block_id": 7, "inner_step": 43, "curr_pos": 497, "curr_confidence": 1.0, "hit": 1, "prev_pos": 496, "prev_topk_positions": [497, 498, 499, 515, 508, 518, 510, 502]}
+{"global_step": 492, "block_id": 7, "inner_step": 44, "curr_pos": 498, "curr_confidence": 1.0, "hit": 1, "prev_pos": 497, "prev_topk_positions": [498, 517, 518, 508, 507, 499, 512, 513]}
+{"global_step": 493, "block_id": 7, "inner_step": 45, "curr_pos": 499, "curr_confidence": 1.0, "hit": 1, "prev_pos": 498, "prev_topk_positions": [499, 508, 518, 517, 513, 507, 501, 500]}
+{"global_step": 494, "block_id": 7, "inner_step": 46, "curr_pos": 500, "curr_confidence": 1.0, "hit": 1, "prev_pos": 499, "prev_topk_positions": [508, 500, 502, 509, 518, 513, 501, 507]}
+{"global_step": 495, "block_id": 7, "inner_step": 47, "curr_pos": 501, "curr_confidence": 1.0, "hit": 1, "prev_pos": 500, "prev_topk_positions": [501, 502, 509, 503, 507, 508, 510, 518]}
+{"global_step": 496, "block_id": 7, "inner_step": 48, "curr_pos": 502, "curr_confidence": 1.0, "hit": 1, "prev_pos": 501, "prev_topk_positions": [502, 507, 504, 508, 503, 510, 511, 505]}
+{"global_step": 497, "block_id": 7, "inner_step": 49, "curr_pos": 503, "curr_confidence": 1.0, "hit": 1, "prev_pos": 502, "prev_topk_positions": [503, 508, 504, 507, 505, 513, 509, 518]}
+{"global_step": 498, "block_id": 7, "inner_step": 50, "curr_pos": 504, "curr_confidence": 1.0, "hit": 1, "prev_pos": 503, "prev_topk_positions": [507, 504, 517, 505, 513, 508, 518, 512]}
+{"global_step": 499, "block_id": 7, "inner_step": 51, "curr_pos": 505, "curr_confidence": 1.0, "hit": 1, "prev_pos": 504, "prev_topk_positions": [507, 505, 513, 508, 518, 514, 509, 517]}
+{"global_step": 500, "block_id": 7, "inner_step": 52, "curr_pos": 506, "curr_confidence": 1.0, "hit": 1, "prev_pos": 505, "prev_topk_positions": [508, 507, 509, 514, 506, 515, 513, 510]}
+{"global_step": 501, "block_id": 7, "inner_step": 53, "curr_pos": 507, "curr_confidence": 1.0, "hit": 1, "prev_pos": 506, "prev_topk_positions": [507, 508, 509, 515, 510, 513, 518, 514]}
+{"global_step": 502, "block_id": 7, "inner_step": 54, "curr_pos": 508, "curr_confidence": 1.0, "hit": 1, "prev_pos": 507, "prev_topk_positions": [508, 517, 509, 518, 513, 512, 515, 510]}
+{"global_step": 503, "block_id": 7, "inner_step": 55, "curr_pos": 509, "curr_confidence": 1.0, "hit": 1, "prev_pos": 508, "prev_topk_positions": [509, 513, 518, 517, 512, 510, 514, 515]}
+{"global_step": 504, "block_id": 7, "inner_step": 56, "curr_pos": 510, "curr_confidence": 1.0, "hit": 1, "prev_pos": 509, "prev_topk_positions": [514, 510, 513, 515, 518, 512, 517, 511]}
+{"global_step": 505, "block_id": 7, "inner_step": 57, "curr_pos": 511, "curr_confidence": 1.0, "hit": 1, "prev_pos": 510, "prev_topk_positions": [515, 511, 514, 513, 517, 512, 518]}
+{"global_step": 506, "block_id": 7, "inner_step": 58, "curr_pos": 512, "curr_confidence": 1.0, "hit": 1, "prev_pos": 511, "prev_topk_positions": [512, 517, 515, 513, 518, 514]}
+{"global_step": 507, "block_id": 7, "inner_step": 59, "curr_pos": 513, "curr_confidence": 1.0, "hit": 1, "prev_pos": 512, "prev_topk_positions": [517, 513, 518, 515, 514]}
+{"global_step": 508, "block_id": 7, "inner_step": 60, "curr_pos": 514, "curr_confidence": 1.0, "hit": 1, "prev_pos": 513, "prev_topk_positions": [517, 518, 515, 514]}
+{"global_step": 509, "block_id": 7, "inner_step": 61, "curr_pos": 515, "curr_confidence": 1.0, "hit": 1, "prev_pos": 514, "prev_topk_positions": [518, 515, 517]}
+{"global_step": 510, "block_id": 7, "inner_step": 62, "curr_pos": 517, "curr_confidence": 1.0, "hit": 1, "prev_pos": 515, "prev_topk_positions": [517, 518]}
+{"global_step": 511, "block_id": 7, "inner_step": 63, "curr_pos": 518, "curr_confidence": 1.0, "hit": 1, "prev_pos": 517, "prev_topk_positions": [518]}
