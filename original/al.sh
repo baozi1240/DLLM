@@ -11,6 +11,7 @@ PROMPTS_FILE="prompts_50.txt"
 # 分开输出
 GENERATED_TXT="all_generated_texts.txt"
 STATS_TXT="all_stats.txt"
+ALL_RECORDS_TXT="all_records_jsonl.txt"
 
 # 临时目录
 TMP_DIR="batch_run_outputs"
@@ -42,9 +43,9 @@ if [[ "${#PROMPTS[@]}" -ne 50 ]]; then
   exit 1
 fi
 
-# 清空旧结果
 : > "${GENERATED_TXT}"
 : > "${STATS_TXT}"
+: > "${ALL_RECORDS_TXT}"
 
 echo "Batch run started at $(date)" | tee -a "${GENERATED_TXT}" "${STATS_TXT}"
 echo "Python script: ${PYTHON_SCRIPT}" | tee -a "${GENERATED_TXT}" "${STATS_TXT}"
@@ -70,10 +71,11 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
           output_prefix="${TMP_DIR}/${run_name}"
           stdout_log="${TMP_DIR}/${run_name}.stdout.log"
           summary_json="${output_prefix}_summary.json"
+          records_jsonl="${output_prefix}_stats.jsonl"
 
           echo "[${run_id}/${total_runs}] Running ${run_name} ..." | tee -a "${STATS_TXT}"
 
-          CUDA_VISIBLE_DEVICES=0 python "${PYTHON_SCRIPT}" \
+          if CUDA_VISIBLE_DEVICES=2 python "${PYTHON_SCRIPT}" \
             --model_path "${MODEL_PATH}" \
             --prompt_text "${prompt}" \
             --gen_length "${gen_length}" \
@@ -83,10 +85,14 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
             --analyze_layer_from_end "${layer}" \
             --output_prefix "${output_prefix}" \
             > "${stdout_log}" 2>&1
+          then
+            echo "[${run_id}/${total_runs}] Finished ${run_name}" | tee -a "${STATS_TXT}"
+          else
+            echo "[${run_id}/${total_runs}] FAILED ${run_name}" | tee -a "${STATS_TXT}"
+            echo "See log: ${stdout_log}" | tee -a "${STATS_TXT}"
+            continue
+          fi
 
-          # =========================
-          # 1) 生成文本 / 回答 输出到 GENERATED_TXT
-          # =========================
           {
             echo "------------------------------------------------------------"
             echo "RUN_NAME: ${run_name}"
@@ -107,9 +113,6 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
             echo
           } >> "${GENERATED_TXT}"
 
-          # =========================
-          # 2) 统计数值 输出到 STATS_TXT
-          # =========================
           {
             echo "------------------------------------------------------------"
             echo "RUN_NAME: ${run_name}"
@@ -132,6 +135,15 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
             fi
           } >> "${STATS_TXT}"
 
+          if [[ -f "${records_jsonl}" ]]; then
+            {
+              echo "------------------------------------------------------------"
+              echo "RUN_NAME: ${run_name}"
+              cat "${records_jsonl}"
+              echo
+            } >> "${ALL_RECORDS_TXT}"
+          fi
+
         done
       done
     done
@@ -142,3 +154,4 @@ echo "============================================================" | tee -a "${
 echo "Batch run finished at $(date)" | tee -a "${GENERATED_TXT}" "${STATS_TXT}"
 echo "Generated texts saved to: ${GENERATED_TXT}" | tee -a "${GENERATED_TXT}" "${STATS_TXT}"
 echo "Stats saved to: ${STATS_TXT}" | tee -a "${GENERATED_TXT}" "${STATS_TXT}"
+echo "All records saved to: ${ALL_RECORDS_TXT}" | tee -a "${GENERATED_TXT}" "${STATS_TXT}"
