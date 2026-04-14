@@ -169,13 +169,12 @@ def generate_and_analyze_prev_focus(
     """
     统计目标：
     对于第 t 步解码出的 token 位置 curr_pos，
-    使用“第 t-1 步指定分析层中，第 t-1 步解码出的 token 位置 prev_pos 的注意力”
-    来看它关注的 top-k 位置里，是否包含 curr_pos。
+    使用“第 t-1 步指定分析层中，第 t-1 步解码出的整批 token 位置”
+    的注意力，来看它们关注的 top-k 位置里，是否包含 curr_pos。
 
-    analyze_layer_from_end:
-        1 => 最后一层
-        2 => 倒数第二层
-        ...
+    特别地：
+    - 保持 LLaDA 原本 step 内并行解码方式不变
+    - 如果当前 block 已在本步解完，则下一步分析候选位置自动切到下一个 block
     """
     assert prompt.size(0) == 1, "当前代码按 batch_size=1 写。"
     assert gen_length % block_length == 0, "gen_length 必须能被 block_length 整除。"
@@ -217,7 +216,10 @@ def generate_and_analyze_prev_focus(
     step_records = []
     decoded_positions = []
 
-    # 真正的“上一步信息”
+    # 存“上一 step”的信息：
+    # - raw_scores: 上一步该层 attention raw scores
+    # - decoded_positions: 上一步并行解码出的整批 token 位置
+    # - candidate_positions: 当前步应该分析的候选位置集合
     prev_step_cache = None
 
     try:
@@ -248,7 +250,6 @@ def generate_and_analyze_prev_focus(
                 else:
                     logits = model(x, attention_mask=attention_mask).logits
 
-                # 当前步 t 的 raw scores
                 current_step_raw_scores = capture["raw_scores"]  # [1, H, Q, K], CPU float
 
                 if logits_eos_inf:
@@ -272,6 +273,7 @@ def generate_and_analyze_prev_focus(
                 else:
                     raise NotImplementedError(remasking)
 
+                # 仍然保持“当前 block 内解码”
                 x0_p[:, block_end:] = -np.inf
                 x0 = torch.where(mask_index, x0, x)
                 confidence = torch.where(mask_index, x0_p, -np.inf)
@@ -292,7 +294,7 @@ def generate_and_analyze_prev_focus(
                         confidence[j, select_index].detach().cpu().tolist()
                     )
 
-                # 写回
+                # 写回：保持原始并行写回
                 x[transfer_index] = x0[transfer_index]
 
                 current_positions = batch_selected_positions[0]
@@ -310,38 +312,49 @@ def generate_and_analyze_prev_focus(
                         "curr_pos": int(curr_pos),
                         "curr_confidence": float(curr_conf),
                         "hit": None,
-                        "prev_pos": None,
-                        "prev_topk_positions": None,
+                        "prev_focus_info": None,
                         "analyzed_layer_index": int(target_block_index),
                         "analyzed_layer_from_end": int(analyze_layer_from_end),
                         "total_layers": int(total_layers),
                     }
 
                     if prev_step_cache is not None:
-                        prev_pos = prev_step_cache["last_decoded_pos"]
-                        prev_raw_scores = prev_step_cache["raw_scores"]   # [1, H, Q, K]
+                        prev_raw_scores = prev_step_cache["raw_scores"]          # [1, H, Q, K]
+                        prev_decoded_positions = prev_step_cache["decoded_positions"]
                         prev_candidate_positions = prev_step_cache["candidate_positions"]
-                        prev_block_start = prev_step_cache["block_start"]
-                        prev_block_end = prev_step_cache["block_end"]
 
-                        if (
-                            prev_pos is not None
-                            and prev_block_start <= prev_pos < prev_block_end
-                            and prev_candidate_positions.numel() > 0
-                        ):
+                        prev_focus_info = []
+                        hit = None
+
+                        if prev_decoded_positions.numel() > 0 and prev_candidate_positions.numel() > 0:
                             agg_scores = prev_raw_scores[0].sum(dim=0)  # [Q, K]
-                            candidate_scores = agg_scores[prev_pos, prev_candidate_positions]
+                            any_hit = 0
 
-                            k_local = min(topk, candidate_scores.numel())
-                            top_idx = torch.topk(candidate_scores, k=k_local).indices
-                            prev_focus_topk = prev_candidate_positions[top_idx].cpu().tolist()
-                            hit = int(curr_pos in prev_focus_topk)
-                        else:
-                            prev_focus_topk = []
-                            hit = None
+                            for prev_pos in prev_decoded_positions.tolist():
+                                if not (0 <= prev_pos < agg_scores.shape[0]):
+                                    continue
 
-                        record["prev_pos"] = int(prev_pos) if prev_pos is not None else None
-                        record["prev_topk_positions"] = prev_focus_topk
+                                candidate_scores = agg_scores[prev_pos, prev_candidate_positions]
+                                if candidate_scores.numel() == 0:
+                                    continue
+
+                                k_local = min(topk, candidate_scores.numel())
+                                top_idx = torch.topk(candidate_scores, k=k_local).indices
+                                focus_topk = prev_candidate_positions[top_idx].cpu().tolist()
+                                one_hit = int(curr_pos in focus_topk)
+
+                                prev_focus_info.append({
+                                    "prev_pos": int(prev_pos),
+                                    "topk_positions": focus_topk,
+                                    "hit": one_hit,
+                                })
+
+                                if one_hit:
+                                    any_hit = 1
+
+                            hit = any_hit if len(prev_focus_info) > 0 else None
+
+                        record["prev_focus_info"] = prev_focus_info if hit is not None else None
                         record["hit"] = hit
 
                     step_records.append(record)
@@ -349,20 +362,34 @@ def generate_and_analyze_prev_focus(
                 for curr_pos, _ in paired:
                     decoded_positions.append(int(curr_pos))
 
-                # 当前步最后一个被记入 decoded_positions 的位置
-                current_step_last_decoded_pos = int(paired[-1][0]) if len(paired) > 0 else None
+                # 当前步并行解码出的整批 token 位置
+                current_step_decoded_positions = torch.tensor(
+                    [int(pos) for pos, _ in paired],
+                    dtype=torch.long
+                )
 
-                # 下一步可选位置：当前 block 内仍是 mask 的位置
-                current_step_candidate_positions = (
+                # 先看当前 block 内还剩哪些 mask
+                current_block_candidate_positions = (
                     torch.where(x[0, block_start:block_end] == mask_id)[0] + block_start
                 ).detach().cpu()
 
+                # 如果当前 block 已解完，则下一步候选切到下一个 block
+                if current_block_candidate_positions.numel() > 0:
+                    next_step_candidate_positions = current_block_candidate_positions
+                else:
+                    if num_block + 1 < num_blocks:
+                        next_block_start = prompt.shape[1] + (num_block + 1) * block_length
+                        next_block_end = prompt.shape[1] + (num_block + 2) * block_length
+                        next_step_candidate_positions = (
+                            torch.where(x[0, next_block_start:next_block_end] == mask_id)[0] + next_block_start
+                        ).detach().cpu()
+                    else:
+                        next_step_candidate_positions = torch.empty(0, dtype=torch.long)
+
                 prev_step_cache = {
                     "raw_scores": current_step_raw_scores,
-                    "last_decoded_pos": current_step_last_decoded_pos,
-                    "candidate_positions": current_step_candidate_positions,
-                    "block_start": block_start,
-                    "block_end": block_end,
+                    "decoded_positions": current_step_decoded_positions,
+                    "candidate_positions": next_step_candidate_positions,
                 }
 
         total = sum(1 for r in step_records if r["hit"] is not None)
