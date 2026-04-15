@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
+from pathlib import Path
 
 from transformers import AutoTokenizer, AutoModel
 
@@ -123,7 +124,9 @@ def generate(model, prompt, attention_mask=None, steps=128, gen_length=128, bloc
 def main():
     device = 'cuda'
 
-    model_path = "/DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base"
+    #model_path = "/DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base"
+    #model_path = str(Path(__file__).resolve().parent / "LLaDA-8B-Base")
+    model_path = 'GSAI-ML/LLaDA-8B-Instruct'
     model = AutoModel.from_pretrained(
             model_path,
             trust_remote_code=True,

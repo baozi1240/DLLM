@@ -5,7 +5,8 @@ set -euo pipefail
 # Config
 # =========================
 PYTHON_SCRIPT="analyse.py"
-MODEL_PATH="/DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base"
+#MODEL_PATH="/DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base"
+MODEL_PATH="/home/xuefeng/DLLM/DLLM/original/LLaDA-8B-Base"
 PROMPTS_FILE="prompts_50.txt"
 
 # 分开输出

@@ -2,6 +2,7 @@ import math
 import json
 import argparse
 import types
+from pathlib import Path
 
 import torch
 import numpy as np
@@ -420,11 +421,12 @@ def generate_and_analyze_prev_focus(
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    default_model_path = str(Path(__file__).resolve().parent / "LLaDA-8B-Base")
 
     parser.add_argument(
         "--model_path",
         type=str,
-        default="/DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base"
+        default=default_model_path
     )
     parser.add_argument(
         "--prompt_text",

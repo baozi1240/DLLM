@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import torch
 from transformers import AutoTokenizer, AutoModel
 from generate import generate
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model_path = "/DISK1/home/yx_zhao31/LLaDA/weigh/LLaDA-8B-Base"
+# 与脚本同目录下的 LLaDA-8B-Base（可从 Hugging Face GSAI-ML/LLaDA-8B-Base 下载完整权重）
+model_path = str(Path(__file__).resolve().parent / "LLaDA-8B-Base")
 
 # 1. 加载 tokenizer
 tokenizer = AutoTokenizer.from_pretrained(

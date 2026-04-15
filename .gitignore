@@ -1,0 +1,3 @@
+# 任意层级的 .codex（子目录 .gitignore 不能用 ../ 指向父目录）
+**/.codex
+**/test/
