@@ -1,0 +1,5 @@
+*.safetensors
+*outputs/
+*.txt
+*scripts/
+__pycache__/
