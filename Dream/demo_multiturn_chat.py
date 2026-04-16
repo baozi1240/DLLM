@@ -1,3 +1,4 @@
+import argparse
 import torch
 from transformers import AutoModel, AutoTokenizer
 
@@ -18,6 +19,12 @@ def get_preferred_dtype(device):
         return torch.float16
     return torch.float32
 import time
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--block_length", type=int, default=None)
+    return parser.parse_args()
 
 
 def _sanitize_probabilities(probs: torch.Tensor) -> torch.Tensor:
@@ -52,6 +59,7 @@ if not getattr(torch.multinomial, "_dream_safe", False):
     _safe_multinomial._dream_safe = True  # type: ignore[attr-defined]
     torch.multinomial = _safe_multinomial  # type: ignore[assignment]
 # Load model and tokenizer
+args = parse_args()
 model_path = "Dream-org/Dream-v0-Instruct-7B"
 device = get_best_device()
 dtype = get_preferred_dtype(device)
@@ -102,6 +110,7 @@ while True:
         steps=256,
         temperature=0.4,
         top_p=0.95,
+        block_length=args.block_length,
         alg="entropy",
         alg_temp=0.1,
         generation_tokens_hook_func=generation_tokens_hook_func

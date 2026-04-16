@@ -1,6 +1,13 @@
+import argparse
 import time
 import torch
 from transformers import AutoModel, AutoTokenizer
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--block_length", type=int, default=None)
+    return parser.parse_args()
 
 def select_device():
     if torch.cuda.is_available():
@@ -9,6 +16,8 @@ def select_device():
     if mps_backend is not None and mps_backend.is_available():
         return "mps"
     return "cpu"
+
+args = parse_args()
 
 # --- Model Loading ---
 model_path = "./models/Dream-v0-Instruct-7B"
@@ -43,6 +52,7 @@ output = model.diffusion_generate(
     steps=512,
     temperature=0.0,
     top_p=0.95,
+    block_length=args.block_length,
     alg="entropy",
     alg_temp=0.,
 )

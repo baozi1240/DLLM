@@ -1,7 +1,15 @@
+import argparse
 import time
 import torch
 from transformers import AutoModel, AutoTokenizer
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--block_length", type=int, default=None)
+    return parser.parse_args()
+
+args = parse_args()
 model_path = "Dream-org/Dream-v0-Instruct-7B"
 model = AutoModel.from_pretrained(model_path, torch_dtype=torch.bfloat16, trust_remote_code=True)
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
@@ -34,6 +42,7 @@ output = model.diffusion_generate(
     steps=256,
     temperature=0.6,
     top_p=0.95,
+    block_length=args.block_length,
     alg="origin",
     # alg_temp=0.,
     generation_tokens_hook_func=generation_tokens_hook_func

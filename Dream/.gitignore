@@ -3,3 +3,4 @@
 *.txt
 *scripts/
 __pycache__/
+stats/
