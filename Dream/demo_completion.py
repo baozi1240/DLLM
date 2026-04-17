@@ -7,6 +7,9 @@ from transformers import AutoModel, AutoTokenizer
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--block_length", type=int, default=None)
+    parser.add_argument("--use_cache", action="store_true")
+    parser.add_argument("--dual_cache", action="store_true")
+    parser.add_argument("--show_time", action="store_true")
     return parser.parse_args()
 
 def select_device():
@@ -18,9 +21,10 @@ def select_device():
     return "cpu"
 
 args = parse_args()
+use_cache = args.use_cache or args.dual_cache
 
 # --- Model Loading ---
-model_path = "./models/Dream-v0-Instruct-7B"
+model_path = "./models/Dream-v0-Base-7B"
 device = select_device()
 dtype_by_device = {
     "cuda": torch.bfloat16,
@@ -29,6 +33,7 @@ dtype_by_device = {
 }
 dtype = dtype_by_device[device]
 print(f"Using device: {device} (dtype={dtype})")
+print(f"use_cache={use_cache}, dual_cache={args.dual_cache}")
 
 model = AutoModel.from_pretrained(model_path, torch_dtype=dtype, trust_remote_code=True)
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
@@ -43,6 +48,10 @@ inputs = tokenizer.apply_chat_template(
 input_ids = inputs.input_ids.to(device)
 attention_mask = inputs.attention_mask.to(device)
 
+if args.show_time and device == "cuda":
+    torch.cuda.synchronize()
+start_time = time.perf_counter()
+
 output = model.diffusion_generate(
     input_ids,
     attention_mask=attention_mask,
@@ -53,12 +62,21 @@ output = model.diffusion_generate(
     temperature=0.0,
     top_p=0.95,
     block_length=args.block_length,
+    use_cache=use_cache,
+    dual_cache=args.dual_cache,
     alg="entropy",
     alg_temp=0.,
 )
+
+if args.show_time and device == "cuda":
+    torch.cuda.synchronize()
+elapsed_time = time.perf_counter() - start_time
+
 generations = [
     tokenizer.decode(g[len(p) :].tolist())
     for p, g in zip(input_ids, output.sequences)
 ]
 
 print(generations[0].split(tokenizer.eos_token)[0])
+if args.show_time:
+    print(f"Inference time: {elapsed_time:.4f}s")
