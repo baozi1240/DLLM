@@ -197,7 +197,16 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, block_end_index: Optional[torch.Tensor] = None):
+def apply_rotary_pos_emb(
+    q,
+    k,
+    cos,
+    sin,
+    position_ids=None,
+    unsqueeze_dim=1,
+    block_end_index: Optional[torch.Tensor] = None,
+    query_position_ids: Optional[torch.Tensor] = None,
+):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -221,14 +230,17 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1, blo
     sin = sin.unsqueeze(unsqueeze_dim)
     query_len, key_len = q.shape[-2], k.shape[-2]
 
-    if block_end_index is None:
-        q_cos = cos[:, :, key_len - query_len : key_len, :]
-        q_sin = sin[:, :, key_len - query_len : key_len, :]
+    if query_position_ids is not None:
+        if query_position_ids.ndim == 1:
+            query_position_ids = query_position_ids.unsqueeze(0)
+        gather_index = query_position_ids[:, None, :, None].expand(-1, cos.shape[1], -1, cos.shape[-1])
+        q_cos = torch.gather(cos, 2, gather_index)
+        q_sin = torch.gather(sin, 2, gather_index)
+        q_embed = (q * q_cos) + (rotate_half(q) * q_sin)
+    elif block_end_index is None:
+        q_embed = (q * cos[:, :, key_len - query_len : key_len, :]) + (rotate_half(q) * sin[:, :, key_len - query_len : key_len, :])
     else:
-        q_cos = cos[:, :, block_end_index.item() - query_len : block_end_index.item(), :]
-        q_sin = sin[:, :, block_end_index.item() - query_len : block_end_index.item(), :]
-
-    q_embed = (q * q_cos) + (rotate_half(q) * q_sin)
+        q_embed = (q * cos[:, :, block_end_index.item() - query_len : block_end_index.item(), :]) + (rotate_half(q) * sin[:, :, block_end_index.item() - query_len : block_end_index.item(), :])
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
@@ -312,6 +324,7 @@ class DreamAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
+        query_position_ids: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -362,7 +375,12 @@ class DreamAttention(nn.Module):
 
         if dual_cache:
             query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin, block_end_index=replace_end_index
+                query_states,
+                key_states,
+                cos,
+                sin,
+                block_end_index=replace_end_index,
+                query_position_ids=query_position_ids,
             )
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -418,6 +436,7 @@ class DreamSdpaAttention(DreamAttention):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
+        query_position_ids: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             logger.warning_once(
@@ -434,6 +453,7 @@ class DreamSdpaAttention(DreamAttention):
                 position_embeddings=position_embeddings,
                 dual_cache=dual_cache,
                 replace_position=replace_position,
+                query_position_ids=query_position_ids,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -485,7 +505,12 @@ class DreamSdpaAttention(DreamAttention):
 
         if dual_cache:
             query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin, block_end_index=replace_end_index
+                query_states,
+                key_states,
+                cos,
+                sin,
+                block_end_index=replace_end_index,
+                query_position_ids=query_position_ids,
             ) # TODO: 支持复杂 kv 更新策略的 rope
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -556,6 +581,7 @@ class DreamDecoderLayer(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
+        query_position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -596,6 +622,7 @@ class DreamDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             dual_cache=dual_cache,
             replace_position=replace_position,
+            query_position_ids=query_position_ids,
         )
         hidden_states = residual + hidden_states
 
@@ -736,6 +763,7 @@ class DreamBaseModel(DreamPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
+        query_position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -804,6 +832,7 @@ class DreamBaseModel(DreamPreTrainedModel):
                     position_embeddings,
                     dual_cache,
                     replace_position,
+                    query_position_ids,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -817,6 +846,7 @@ class DreamBaseModel(DreamPreTrainedModel):
                     position_embeddings=position_embeddings,
                     dual_cache=dual_cache,
                     replace_position=replace_position,
+                    query_position_ids=query_position_ids,
                 )
 
             hidden_states = layer_outputs[0]
@@ -894,6 +924,7 @@ class DreamModel(DreamGenerationMixin, DreamPreTrainedModel):
         num_logits_to_keep: int = 0,
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
+        query_position_ids: Optional[torch.LongTensor] = None,
         **loss_kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -916,6 +947,7 @@ class DreamModel(DreamGenerationMixin, DreamPreTrainedModel):
             cache_position=cache_position,
             dual_cache=dual_cache,
             replace_position=replace_position,
+            query_position_ids=query_position_ids,
         )
 
         hidden_states = outputs[0]

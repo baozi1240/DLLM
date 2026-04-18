@@ -10,6 +10,9 @@ def parse_args():
     parser.add_argument("--use_cache", action="store_true")
     parser.add_argument("--dual_cache", action="store_true")
     parser.add_argument("--show_time", action="store_true")
+    parser.add_argument("--focus_decode", action="store_true")
+    parser.add_argument("--focus_layer", type=int, default=3)
+    parser.add_argument("--focus_topk", type=int, default=8)
     return parser.parse_args()
 
 def select_device():
@@ -33,7 +36,7 @@ dtype_by_device = {
 }
 dtype = dtype_by_device[device]
 print(f"Using device: {device} (dtype={dtype})")
-print(f"use_cache={use_cache}, dual_cache={args.dual_cache}")
+print(f"use_cache={use_cache}, dual_cache={args.dual_cache}, focus_decode={args.focus_decode}, focus_layer=-{args.focus_layer}, focus_topk={args.focus_topk}")
 
 model = AutoModel.from_pretrained(model_path, torch_dtype=dtype, trust_remote_code=True)
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
@@ -66,6 +69,9 @@ output = model.diffusion_generate(
     dual_cache=args.dual_cache,
     alg="entropy",
     alg_temp=0.,
+    focus_decode=args.focus_decode,
+    focus_layer=args.focus_layer,
+    focus_topk=args.focus_topk,
 )
 
 if args.show_time and device == "cuda":
