@@ -196,6 +196,28 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def _replace_position_to_indices(
+    replace_position: Optional[torch.Tensor],
+    q_len: int,
+    *,
+    device: torch.device,
+) -> Optional[torch.LongTensor]:
+    """Resolve the global indices of the queries being recomputed in dual-cache mode."""
+    if replace_position is None:
+        return None
+
+    query_indices = []
+    for batch_replace_position in replace_position:
+        batch_query_indices = batch_replace_position.nonzero(as_tuple=True)[0]
+        if batch_query_indices.numel() != q_len:
+            raise ValueError(
+                "The number of `replace_position` entries must match the current query length in dual-cache mode."
+            )
+        query_indices.append(batch_query_indices.to(device=device, dtype=torch.long))
+
+    return torch.stack(query_indices, dim=0)
+
+
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(
     q,
@@ -204,8 +226,7 @@ def apply_rotary_pos_emb(
     sin,
     position_ids=None,
     unsqueeze_dim=1,
-    block_end_index: Optional[torch.Tensor] = None,
-    query_position_ids: Optional[torch.Tensor] = None,
+    replace_position: Optional[torch.Tensor] = None,
 ):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -230,17 +251,14 @@ def apply_rotary_pos_emb(
     sin = sin.unsqueeze(unsqueeze_dim)
     query_len, key_len = q.shape[-2], k.shape[-2]
 
-    if query_position_ids is not None:
-        if query_position_ids.ndim == 1:
-            query_position_ids = query_position_ids.unsqueeze(0)
-        gather_index = query_position_ids[:, None, :, None].expand(-1, cos.shape[1], -1, cos.shape[-1])
+    query_indices = _replace_position_to_indices(replace_position, query_len, device=q.device)
+    if query_indices is not None:
+        gather_index = query_indices[:, None, :, None].expand(-1, cos.shape[1], -1, cos.shape[-1])
         q_cos = torch.gather(cos, 2, gather_index)
         q_sin = torch.gather(sin, 2, gather_index)
         q_embed = (q * q_cos) + (rotate_half(q) * q_sin)
-    elif block_end_index is None:
-        q_embed = (q * cos[:, :, key_len - query_len : key_len, :]) + (rotate_half(q) * sin[:, :, key_len - query_len : key_len, :])
     else:
-        q_embed = (q * cos[:, :, block_end_index.item() - query_len : block_end_index.item(), :]) + (rotate_half(q) * sin[:, :, block_end_index.item() - query_len : block_end_index.item(), :])
+        q_embed = (q * cos[:, :, key_len - query_len : key_len, :]) + (rotate_half(q) * sin[:, :, key_len - query_len : key_len, :])
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
@@ -324,14 +342,12 @@ class DreamAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
-        query_position_ids: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        replace_end_index = None
 
         if past_key_value is not None:
             if dual_cache:
@@ -342,15 +358,18 @@ class DreamAttention(nn.Module):
                     raise ValueError("batch size mismatch between hidden states and replace_position")
                 for batch_idx in range(bsz):
                     batch_replace_indices = replace_position[batch_idx].nonzero(as_tuple=True)[0]
-                    if len(batch_replace_indices) > 0:
-                        num_updates = min(len(batch_replace_indices), key_states.shape[1])
-                        past_key[batch_idx, batch_replace_indices[:num_updates], :] = key_states[batch_idx, :num_updates, :]
-                        past_value[batch_idx, batch_replace_indices[:num_updates], :] = value_states[batch_idx, :num_updates, :]
+                    if batch_replace_indices.numel() > 0:
+                        if batch_replace_indices.numel() != key_states.shape[1]:
+                            raise ValueError(
+                                "In dual-cache mode, the number of `replace_position` entries must match "
+                                "the number of recomputed key/value states."
+                            )
+                        # `key_states/value_states` are produced in the same order as the recomputed queries,
+                        # so we write them back to the exact sparse cache indices selected by `replace_position`.
+                        past_key[batch_idx, batch_replace_indices, :] = key_states[batch_idx]
+                        past_value[batch_idx, batch_replace_indices, :] = value_states[batch_idx]
                 key_states = past_key
                 value_states = past_value
-                replace_end_index = (
-                    replace_position.nonzero(as_tuple=True)[1].max() + 1 if replace_position.any() else key_states.shape[1]
-                )
             else:
                 past_key, past_value = past_key_value
                 key_states = torch.cat([past_key, key_states], dim=-2)
@@ -379,8 +398,7 @@ class DreamAttention(nn.Module):
                 key_states,
                 cos,
                 sin,
-                block_end_index=replace_end_index,
-                query_position_ids=query_position_ids,
+                replace_position=replace_position,
             )
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -436,7 +454,6 @@ class DreamSdpaAttention(DreamAttention):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
-        query_position_ids: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             logger.warning_once(
@@ -453,7 +470,6 @@ class DreamSdpaAttention(DreamAttention):
                 position_embeddings=position_embeddings,
                 dual_cache=dual_cache,
                 replace_position=replace_position,
-                query_position_ids=query_position_ids,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -461,7 +477,6 @@ class DreamSdpaAttention(DreamAttention):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        replace_end_index = None
 
         if past_key_value is not None:
             if dual_cache:
@@ -472,15 +487,16 @@ class DreamSdpaAttention(DreamAttention):
                     raise ValueError("batch size mismatch between hidden states and replace_position")
                 for batch_idx in range(bsz):
                     batch_replace_indices = replace_position[batch_idx].nonzero(as_tuple=True)[0]
-                    if len(batch_replace_indices) > 0:
-                        num_updates = min(len(batch_replace_indices), key_states.shape[1])
-                        past_key[batch_idx, batch_replace_indices[:num_updates], :] = key_states[batch_idx, :num_updates, :]
-                        past_value[batch_idx, batch_replace_indices[:num_updates], :] = value_states[batch_idx, :num_updates, :]
+                    if batch_replace_indices.numel() > 0:
+                        if batch_replace_indices.numel() != key_states.shape[1]:
+                            raise ValueError(
+                                "In dual-cache mode, the number of `replace_position` entries must match "
+                                "the number of recomputed key/value states."
+                            )
+                        past_key[batch_idx, batch_replace_indices, :] = key_states[batch_idx]
+                        past_value[batch_idx, batch_replace_indices, :] = value_states[batch_idx]
                 key_states = past_key
                 value_states = past_value
-                replace_end_index = (
-                    replace_position.nonzero(as_tuple=True)[1].max() + 1 if replace_position.any() else key_states.shape[1]
-                )
             else:
                 past_key, past_value = past_key_value
                 key_states = torch.cat([past_key, key_states], dim=-2)
@@ -509,9 +525,8 @@ class DreamSdpaAttention(DreamAttention):
                 key_states,
                 cos,
                 sin,
-                block_end_index=replace_end_index,
-                query_position_ids=query_position_ids,
-            ) # TODO: 支持复杂 kv 更新策略的 rope
+                replace_position=replace_position,
+            )
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -581,7 +596,6 @@ class DreamDecoderLayer(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
-        query_position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -622,7 +636,6 @@ class DreamDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             dual_cache=dual_cache,
             replace_position=replace_position,
-            query_position_ids=query_position_ids,
         )
         hidden_states = residual + hidden_states
 
@@ -763,7 +776,6 @@ class DreamBaseModel(DreamPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
-        query_position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -832,7 +844,6 @@ class DreamBaseModel(DreamPreTrainedModel):
                     position_embeddings,
                     dual_cache,
                     replace_position,
-                    query_position_ids,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -846,7 +857,6 @@ class DreamBaseModel(DreamPreTrainedModel):
                     position_embeddings=position_embeddings,
                     dual_cache=dual_cache,
                     replace_position=replace_position,
-                    query_position_ids=query_position_ids,
                 )
 
             hidden_states = layer_outputs[0]
@@ -924,7 +934,6 @@ class DreamModel(DreamGenerationMixin, DreamPreTrainedModel):
         num_logits_to_keep: int = 0,
         dual_cache: Optional[bool] = False,
         replace_position: Optional[torch.Tensor] = None,
-        query_position_ids: Optional[torch.LongTensor] = None,
         **loss_kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -947,7 +956,6 @@ class DreamModel(DreamGenerationMixin, DreamPreTrainedModel):
             cache_position=cache_position,
             dual_cache=dual_cache,
             replace_position=replace_position,
-            query_position_ids=query_position_ids,
         )
 
         hidden_states = outputs[0]

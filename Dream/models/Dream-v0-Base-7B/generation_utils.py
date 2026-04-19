@@ -121,7 +121,6 @@ def _patch_attention_for_raw_scores(target_block):
         position_embeddings=None,
         dual_cache=False,
         replace_position=None,
-        query_position_ids=None,
     ):
         del cache_position
         bsz, q_len, _ = hidden_states.size()
@@ -129,7 +128,6 @@ def _patch_attention_for_raw_scores(target_block):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        replace_end_index = None
 
         if past_key_value is not None:
             if dual_cache:
@@ -140,15 +138,16 @@ def _patch_attention_for_raw_scores(target_block):
                     raise ValueError("batch size mismatch between hidden states and replace_position")
                 for batch_idx in range(bsz):
                     batch_replace_indices = replace_position[batch_idx].nonzero(as_tuple=True)[0]
-                    if len(batch_replace_indices) > 0:
-                        num_updates = min(len(batch_replace_indices), key_states.shape[1])
-                        past_key[batch_idx, batch_replace_indices[:num_updates], :] = key_states[batch_idx, :num_updates, :]
-                        past_value[batch_idx, batch_replace_indices[:num_updates], :] = value_states[batch_idx, :num_updates, :]
+                    if batch_replace_indices.numel() > 0:
+                        if batch_replace_indices.numel() != key_states.shape[1]:
+                            raise ValueError(
+                                "In dual-cache mode, the number of `replace_position` entries must match "
+                                "the number of recomputed key/value states."
+                            )
+                        past_key[batch_idx, batch_replace_indices, :] = key_states[batch_idx]
+                        past_value[batch_idx, batch_replace_indices, :] = value_states[batch_idx]
                 key_states = past_key
                 value_states = past_value
-                replace_end_index = (
-                    replace_position.nonzero(as_tuple=True)[1].max() + 1 if replace_position.any() else key_states.shape[1]
-                )
             else:
                 past_key, past_value = past_key_value
                 key_states = torch.cat([past_key, key_states], dim=-2)
@@ -171,8 +170,7 @@ def _patch_attention_for_raw_scores(target_block):
                 key_states,
                 cos,
                 sin,
-                block_end_index=replace_end_index,
-                query_position_ids=query_position_ids,
+                replace_position=replace_position,
             )
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -193,23 +191,7 @@ def _patch_attention_for_raw_scores(target_block):
                 attn_bias = attn_bias.to(dtype=raw_scores.dtype)
             raw_scores = raw_scores + attn_bias
 
-        if query_position_ids is not None:
-            capture["query_position_ids"] = query_position_ids.detach().clone()
-        elif position_ids is not None and position_ids.shape[-1] >= key_states.shape[-2]:
-            capture["query_position_ids"] = position_ids[:, key_states.shape[-2] - q_len : key_states.shape[-2]].detach().clone()
-        elif replace_end_index is not None:
-            capture["query_position_ids"] = torch.arange(
-                replace_end_index.item() - q_len,
-                replace_end_index.item(),
-                device=hidden_states.device,
-            ).unsqueeze(0)
-        else:
-            capture["query_position_ids"] = torch.arange(
-                key_states.shape[-2] - q_len,
-                key_states.shape[-2],
-                device=hidden_states.device,
-            ).unsqueeze(0)
-        capture["raw_scores"] = raw_scores.detach().float()
+        capture["score_sums"] = raw_scores.detach().float().sum(dim=1)
 
         attn_weights = torch.nn.functional.softmax(raw_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = torch.nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
@@ -494,6 +476,9 @@ class DreamGenerationMixin:
         block_length = kwargs.get("block_length", None)
         use_cache = kwargs.get("use_cache", False)
         dual_cache = kwargs.get("dual_cache", False)
+        focus_decode = kwargs.get("focus_decode", False)
+        focus_layer = kwargs.get("focus_layer", None)
+        focus_topk = kwargs.get("focus_topk", None)
 
         result = self._sample(
             input_ids,
@@ -502,6 +487,9 @@ class DreamGenerationMixin:
             block_length=block_length,
             use_cache=use_cache,
             dual_cache=dual_cache,
+            focus_decode=focus_decode,
+            focus_layer=focus_layer,
+            focus_topk=focus_topk,
         )
         return result
 
@@ -513,6 +501,9 @@ class DreamGenerationMixin:
         block_length: Optional[int],
         use_cache: bool,
         dual_cache: bool,
+        focus_decode: bool,
+        focus_layer: Optional[int],
+        focus_topk: Optional[int],
     ) -> Union[DreamModelOutput, torch.LongTensor]:
         # init values
         output_history = generation_config.output_history
@@ -526,9 +517,6 @@ class DreamGenerationMixin:
         temperature = generation_config.temperature
         top_p = generation_config.top_p
         top_k = generation_config.top_k
-        focus_decode = bool(getattr(generation_config, "focus_decode", False))
-        focus_layer = getattr(generation_config, "focus_layer", None)
-        focus_topk = getattr(generation_config, "focus_topk", None)
 
         histories = [] if (return_dict_in_generate and output_history) else None
 
@@ -574,8 +562,8 @@ class DreamGenerationMixin:
         restore_attention = None
         focus_capture = None
         if focus_decode:
-            if not use_cache or not dual_cache:
-                raise ValueError("focus_decode requires use_cache=True and dual_cache=True.")
+            if not use_cache:
+                raise ValueError("focus_decode requires use_cache=True.")
             if x.shape[0] != 1:
                 raise ValueError("focus_decode currently only supports batch_size=1.")
             if focus_layer is None or focus_topk is None:
@@ -594,29 +582,20 @@ class DreamGenerationMixin:
                 for layer_cache in cache:
                     trimmed.append(tuple(cache_tensor[:, :end_idx, :] for cache_tensor in layer_cache))
                 return trimmed
-            def _gather_attention_rows(mask, positions):
+            def _gather_attention_rows(mask, query_indices):
                 if mask == "full":
                     return mask
-                return mask.index_select(2, positions)
+                return mask.index_select(2, query_indices)
 
-            def _select_focus_candidates(prev_raw_scores, prev_query_positions, prev_sample_pos, masked_positions):
-                if masked_positions.numel() == 0:
-                    return masked_positions
-                k = min(int(focus_topk), masked_positions.numel())
-                if (
-                    prev_raw_scores is None
-                    or prev_query_positions is None
-                    or prev_sample_pos is None
-                ):
-                    return masked_positions[:k]
+            def _select_focus_indices(prev_score_sums, prev_compute_indices, last_sample_index, masked_indices):
+                k = min(int(focus_topk), masked_indices.numel())
+                query_match = (prev_compute_indices[0] == int(last_sample_index)).nonzero(as_tuple=True)[0]
+                if query_match.numel() == 0:
+                    raise RuntimeError("Unable to align the last sampled index with captured focus attention rows.")
 
-                matches = (prev_query_positions[0] == int(prev_sample_pos)).nonzero(as_tuple=True)[0]
-                if matches.numel() == 0: # 可能冗余：prev_sample_pos 一定会在 prev_query_positions 中
-                    return masked_positions[:k]
-
-                attention_scores = prev_raw_scores[0].sum(dim=0)[matches[0], masked_positions] # 按 head sum，选 prev_sample 位置
+                attention_scores = prev_score_sums[0, query_match[0], masked_indices]
                 top_indices = torch.topk(attention_scores, k=k).indices
-                return masked_positions[top_indices] # 注意这里返回的是 global position
+                return masked_indices[top_indices]
 
             def _sample_focus_logits(candidate_logits):
                 if alg == 'origin':
@@ -658,6 +637,9 @@ class DreamGenerationMixin:
                 raise RuntimeError(f"Unknown alg: {alg}")
 
             try:
+                focus_replace_position = torch.zeros_like(x, dtype=torch.bool) if focus_decode else None
+                focus_full_confidence = None
+                focus_x_candidate = None
                 for block_id in range(num_blocks):
                     current_block_start = input_ids.shape[1] + block_id * block_length
                     current_block_end = current_block_start + block_length
@@ -671,14 +653,18 @@ class DreamGenerationMixin:
                     x[:, current_block_start] = x0[:, current_block_start]
 
                     prev_focus_scores = None
-                    prev_focus_query_positions = None
-                    last_sample_pos = None
-                    focus_update_pos = deque(maxlen=int(focus_topk)) if focus_decode else None
+                    prev_focus_compute_indices = None
+                    last_sample_index = None
+                    focus_update_indices = deque(maxlen=int(focus_topk)) if focus_decode else None
                     if focus_decode:
-                        prev_focus_scores = focus_capture.get("raw_scores")
-                        prev_focus_query_positions = focus_capture.get("query_position_ids")
-                        last_sample_pos = int(current_block_start)
-                        focus_update_pos.append(int(current_block_start)) # first sample token at KV warmup
+                        prev_focus_scores = focus_capture.get("score_sums")
+                        prev_focus_compute_indices = torch.arange(
+                            x.shape[1],
+                            device=x.device,
+                            dtype=torch.long,
+                        ).unsqueeze(0)
+                        last_sample_index = int(current_block_start)
+                        focus_update_indices.append(int(current_block_start))
 
                     if not dual_cache:
                         past_key_values = _trim_past_key_values(past_key_values, current_block_start)
@@ -694,72 +680,107 @@ class DreamGenerationMixin:
                         if not block_mask_index.any():
                             break
 
-                        if dual_cache and focus_decode:
-                            masked_positions = torch.where(block_mask_index[0])[0] + current_block_start
-                            sample_positions = _select_focus_candidates(
+                        if focus_decode:
+                            # 挑选出 sample pos 和 update pos
+                            masked_indices = torch.where(block_mask_index[0])[0] + current_block_start
+                            sample_indices = _select_focus_indices(
                                 prev_focus_scores,
-                                prev_focus_query_positions,
-                                last_sample_pos,
-                                masked_positions,
+                                prev_focus_compute_indices,
+                                last_sample_index,
+                                masked_indices,
                             )
-                            assert sample_positions.numel() != 0 # never go this
+                            assert sample_indices.numel() != 0
 
-                            update_positions = torch.tensor(
-                                list(focus_update_pos),
+                            update_indices = torch.tensor(
+                                list(focus_update_indices),
                                 device=x.device,
                                 dtype=torch.long,
                             )
-                            if update_positions.numel() > 0:
-                                sample_only_mask = ~torch.isin(sample_positions, update_positions)
-                                sample_positions = sample_positions[sample_only_mask]
-                            assert sample_positions.numel() != 0 # never go this
+                            if dual_cache:
+                                # `sample_indices` stay masked and need decoding; `update_indices` are recent
+                                # non-masked tokens whose KV/cache rows are refreshed together with the samples.
+                                sample_indices = torch.sort(sample_indices).values
+                                compute_indices = torch.cat([update_indices, sample_indices], dim=0)
+                                # Keep the query order aligned with `replace_position.nonzero()`, which is also
+                                # the order used later for RoPE gathering and KV cache write-back.
+                                compute_indices = torch.sort(compute_indices).values
+                                sample_mask = torch.isin(compute_indices, sample_indices)
 
-                            compute_positions = sample_positions
-                            if update_positions.numel() > 0:
-                                compute_positions = torch.cat([update_positions, sample_positions], dim=0)
+                                current_x = x.index_select(1, compute_indices)
+                                current_attention_mask = _gather_attention_rows(attention_mask, compute_indices)
+                                current_position_ids = tok_idx if tok_idx is not None else None
+                                replace_position = focus_replace_position
+                                replace_position.zero_()
+                                replace_position[:, compute_indices] = True
 
-                            current_x = x.index_select(1, compute_positions)
-                            current_attention_mask = _gather_attention_rows(attention_mask, compute_positions)
-                            current_position_ids = tok_idx if tok_idx is not None else None
-                            current_query_position_ids = (
-                                tok_idx.index_select(1, compute_positions)
-                                if tok_idx is not None
-                                else compute_positions.unsqueeze(0)
-                            )
-                            replace_position = torch.zeros_like(x, dtype=torch.bool)
-                            replace_position[:, compute_positions] = True
+                                model_output = self(
+                                    current_x,
+                                    current_attention_mask,
+                                    current_position_ids,
+                                    past_key_values=past_key_values,
+                                    use_cache=True,
+                                    dual_cache=True,
+                                    replace_position=replace_position,
+                                )
+                                past_key_values = model_output.past_key_values
+                                logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                                sample_logits = logits[:, sample_mask]
+                                current_compute_indices = compute_indices.unsqueeze(0)
+                            else:
+                                current_x = x[:, current_block_start:]
+                                current_position_ids = (
+                                    tok_idx[:, current_block_start:] if tok_idx is not None else None
+                                )
+                                if attention_mask != "full":
+                                    current_attention_mask = attention_mask[:, :, current_block_start:, :]
+                                else:
+                                    current_attention_mask = attention_mask
 
-                            model_output = self(
-                                current_x,
-                                current_attention_mask,
-                                current_position_ids,
-                                past_key_values=past_key_values,
-                                use_cache=True,
-                                dual_cache=True,
-                                replace_position=replace_position,
-                                query_position_ids=current_query_position_ids,
-                            )
-                            past_key_values = model_output.past_key_values
+                                model_output = self(
+                                    current_x,
+                                    current_attention_mask,
+                                    current_position_ids,
+                                    past_key_values=past_key_values,
+                                    use_cache=True,
+                                )
+                                past_key_values = model_output.past_key_values
+                                logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                                block_logits = logits[:, :block_length]
+                                sample_logits = block_logits[:, sample_indices - current_block_start]
+                                current_compute_indices = torch.arange(
+                                    current_block_start,
+                                    x.shape[1],
+                                    device=x.device,
+                                    dtype=torch.long,
+                                ).unsqueeze(0)
 
-                            sample_logits = model_output.logits[:, update_positions.numel():]
                             candidate_logits = sample_logits[0]
                             confidence, sampled_tokens = _sample_focus_logits(candidate_logits)
 
-                            full_confidence = torch.full_like(
-                                x[:, current_block_start:current_block_end],
-                                -torch.inf,
-                                device=self.device,
-                                dtype=sample_logits.dtype,
-                            )
-                            relative_sample_positions = sample_positions - current_block_start
-                            full_confidence[0, relative_sample_positions] = confidence
+                            if (
+                                focus_full_confidence is None
+                                or focus_full_confidence.shape != (x.size(0), block_length)
+                                or focus_full_confidence.dtype != sample_logits.dtype
+                            ):
+                                focus_full_confidence = torch.empty(
+                                    (x.size(0), block_length),
+                                    device=self.device,
+                                    dtype=sample_logits.dtype,
+                                )
+                            if focus_x_candidate is None or focus_x_candidate.shape != (x.size(0), block_length):
+                                focus_x_candidate = torch.empty(
+                                    (x.size(0), block_length),
+                                    device=self.device,
+                                    dtype=torch.long,
+                                )
+                            full_confidence = focus_full_confidence
+                            full_confidence.fill_(-torch.inf)
+                            relative_sample_indices = sample_indices - current_block_start
+                            full_confidence[0, relative_sample_indices] = confidence
 
-                            x_candidate = torch.zeros_like(
-                                x[:, current_block_start:current_block_end],
-                                device=self.device,
-                                dtype=torch.long,
-                            ) + mask_token_id
-                            x_candidate[0, relative_sample_positions] = sampled_tokens
+                            x_candidate = focus_x_candidate
+                            x_candidate.fill_(mask_token_id)
+                            x_candidate[0, relative_sample_indices] = sampled_tokens
 
                             if alg_temp is None or alg_temp == 0 or alg == 'origin':
                                 _, transfer_index = torch.topk(full_confidence, 1)
@@ -772,11 +793,11 @@ class DreamGenerationMixin:
                             x[:, current_block_start:current_block_end][row_indices, transfer_index] = (
                                 x_candidate[row_indices, transfer_index]
                             )
-                            selected_pos = int((transfer_index[0, 0] + current_block_start).item())
-                            focus_update_pos.append(selected_pos)
-                            last_sample_pos = selected_pos
-                            prev_focus_scores = focus_capture.get("raw_scores")
-                            prev_focus_query_positions = focus_capture.get("query_position_ids")
+                            selected_index = int((transfer_index[0, 0] + current_block_start).item())
+                            focus_update_indices.append(selected_index)
+                            last_sample_index = selected_index
+                            prev_focus_scores = focus_capture.get("score_sums")
+                            prev_focus_compute_indices = current_compute_indices
                         else:
                             if dual_cache:
                                 current_x = x[:, current_block_start:current_block_end]
