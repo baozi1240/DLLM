@@ -3,6 +3,7 @@ import json
 import math
 import sys
 import types
+from collections import deque
 from pathlib import Path
 
 import torch
@@ -123,17 +124,25 @@ def get_all_transformer_blocks(model):
 
 
 
-def get_target_block(model, analyze_layer_from_end=1):
+def get_target_block(model, focus_layer=1):
     blocks = get_all_transformer_blocks(model)
     num_blocks = len(blocks)
 
-    if analyze_layer_from_end < 1 or analyze_layer_from_end > num_blocks:
+    if focus_layer < 1 or focus_layer > num_blocks:
         raise ValueError(
-            f"analyze_layer_from_end must be in [1, {num_blocks}], got {analyze_layer_from_end}"
+            f"focus_layer must be in [1, {num_blocks}], got {focus_layer}"
         )
 
-    target_index = num_blocks - analyze_layer_from_end
+    target_index = num_blocks - focus_layer
     return blocks[target_index], target_index, num_blocks
+
+
+def tensor_to_int_list(value):
+    if value is None:
+        return None
+    if not torch.is_tensor(value):
+        return list(value)
+    return [int(v) for v in value.detach().cpu().tolist()]
 
 
 def patch_attention_for_qk(target_block):
@@ -157,12 +166,12 @@ def patch_attention_for_qk(target_block):
         dual_cache=False,
         replace_position=None,
     ):
+        del cache_position
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        replace_end_index = None
 
         if past_key_value is not None:
             if dual_cache:
@@ -173,15 +182,16 @@ def patch_attention_for_qk(target_block):
                     raise ValueError("batch size mismatch between hidden states and replace_position")
                 for batch_idx in range(bsz):
                     batch_replace_indices = replace_position[batch_idx].nonzero(as_tuple=True)[0]
-                    if len(batch_replace_indices) > 0:
-                        num_updates = min(len(batch_replace_indices), key_states.shape[1])
-                        past_key[batch_idx, batch_replace_indices[:num_updates], :] = key_states[batch_idx, :num_updates, :]
-                        past_value[batch_idx, batch_replace_indices[:num_updates], :] = value_states[batch_idx, :num_updates, :]
+                    if batch_replace_indices.numel() > 0:
+                        if batch_replace_indices.numel() != key_states.shape[1]:
+                            raise ValueError(
+                                "In dual-cache mode, the number of `replace_position` entries must match "
+                                "the number of recomputed key/value states."
+                            )
+                        past_key[batch_idx, batch_replace_indices, :] = key_states[batch_idx]
+                        past_value[batch_idx, batch_replace_indices, :] = value_states[batch_idx]
                 key_states = past_key
                 value_states = past_value
-                replace_end_index = (
-                    replace_position.nonzero(as_tuple=True)[1].max() + 1 if replace_position.any() else key_states.shape[1]
-                )
             else:
                 past_key, past_value = past_key_value
                 key_states = torch.cat([past_key, key_states], dim=-2)
@@ -200,7 +210,11 @@ def patch_attention_for_qk(target_block):
 
         if dual_cache:
             query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin, block_end_index=replace_end_index
+                query_states,
+                key_states,
+                cos,
+                sin,
+                replace_position=replace_position,
             )
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -222,6 +236,20 @@ def patch_attention_for_qk(target_block):
             raw_scores = raw_scores + attn_bias
 
         capture["raw_scores"] = raw_scores.detach().float().cpu()
+        if replace_position is not None:
+            capture["query_position_ids"] = torch.stack(
+                [batch_replace_position.nonzero(as_tuple=True)[0] for batch_replace_position in replace_position],
+                dim=0,
+            ).detach().clone()
+        elif position_ids is not None and position_ids.shape[-1] >= q_len:
+            capture["query_position_ids"] = position_ids[:, -q_len:].detach().clone()
+        else:
+            capture["query_position_ids"] = torch.arange(
+                key_states.shape[-2] - q_len,
+                key_states.shape[-2],
+                device=hidden_states.device,
+            ).unsqueeze(0)
+        capture["score_sums"] = raw_scores.detach().float().sum(dim=1)
 
         attn_weights = nn_functional_softmax(raw_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = torch.nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
@@ -258,9 +286,11 @@ def generate_and_analyze_prev_focus(
     alg="entropy",
     alg_temp=0.0,
     topk=8,
-    analyze_layer_from_end=1,
+    focus_layer=1,
     use_cache=False,
     dual_cache=False,
+    focus_decode=False,
+    focus_topk=None,
 ):
     assert prompt.size(0) == 1, "当前代码按 batch_size=1 写。"
     if mask_id is None:
@@ -296,19 +326,33 @@ def generate_and_analyze_prev_focus(
         position_ids = None
         model_attention_mask = None
 
+    if dual_cache and not use_cache:
+        raise ValueError("dual_cache=True requires use_cache=True")
+    if focus_layer is None:
+        raise ValueError("focus_layer must be provided")
+    if focus_decode:
+        if not use_cache:
+            raise ValueError("focus_decode requires use_cache=True")
+        if focus_topk is None:
+            raise ValueError("focus_decode requires focus_topk")
+        if int(focus_topk) <= 0:
+            raise ValueError(f"focus_topk must be positive, got {focus_topk}")
+
     timesteps = torch.linspace(1, model.generation_config.eps, inner_steps + 1, device=device)
 
     target_block, target_block_index, total_layers = get_target_block(
-        model, analyze_layer_from_end=analyze_layer_from_end
+        model, focus_layer=int(focus_layer)
     )
+    restore_callbacks = []
     restore_fn, capture = patch_attention_for_qk(target_block)
+    restore_callbacks.append(restore_fn)
+    focus_capture = capture
+    if focus_decode:
+        focus_capture = capture
 
     step_records = []
     decoded_positions = []
     prev_step_cache = None
-
-    if dual_cache and not use_cache:
-        raise ValueError("dual_cache=True requires use_cache=True")
 
     try:
         cache_mode = "dual_cache" if dual_cache else ("use_cache" if use_cache else "no_cache")
@@ -321,6 +365,8 @@ def generate_and_analyze_prev_focus(
             paired,
             current_step_raw_scores,
             query_position_offset=0,
+            query_positions=None,
+            focus_step_info=None,
         ):
             nonlocal prev_step_cache
 
@@ -354,11 +400,13 @@ def generate_and_analyze_prev_focus(
                     "hit": None,
                     "prev_focus_info": None,
                     "analyzed_layer_index": int(target_block_index),
-                    "analyzed_layer_from_end": int(analyze_layer_from_end),
+                    "focus_layer": int(focus_layer),
                     "total_layers": int(total_layers),
                     "cache_mode": cache_mode,
                     "use_cache": bool(use_cache),
                     "dual_cache": bool(dual_cache),
+                    "focus_decode": bool(focus_decode),
+                    "focus_step_info": focus_step_info,
                 }
 
                 if prev_step_cache is not None:
@@ -366,6 +414,7 @@ def generate_and_analyze_prev_focus(
                     prev_decoded_positions = prev_step_cache["decoded_positions"]
                     prev_candidate_positions = prev_step_cache["candidate_positions"]
                     prev_query_position_offset = prev_step_cache.get("query_position_offset", 0)
+                    prev_query_positions = prev_step_cache.get("query_positions")
                     prev_focus_info = []
                     hit = None
 
@@ -374,9 +423,16 @@ def generate_and_analyze_prev_focus(
                         any_hit = 0
 
                         for prev_pos in prev_decoded_positions.tolist():
-                            prev_query_idx = prev_pos - prev_query_position_offset
-                            if not (0 <= prev_query_idx < agg_scores.shape[0]):
-                                continue
+                            prev_query_idx = None
+                            if prev_query_positions is not None:
+                                matches = (prev_query_positions == prev_pos).nonzero(as_tuple=True)[0]
+                                if matches.numel() == 0:
+                                    continue
+                                prev_query_idx = int(matches[0].item())
+                            else:
+                                prev_query_idx = prev_pos - prev_query_position_offset
+                                if not (0 <= prev_query_idx < agg_scores.shape[0]):
+                                    continue
 
                             valid_candidate_positions = prev_candidate_positions[
                                 (prev_candidate_positions >= 0) & (prev_candidate_positions < agg_scores.shape[1])
@@ -420,6 +476,11 @@ def generate_and_analyze_prev_focus(
                 ),
                 "candidate_positions": next_step_candidate_positions,
                 "query_position_offset": int(query_position_offset),
+                "query_positions": (
+                    torch.tensor(query_positions, dtype=torch.long)
+                    if query_positions is not None
+                    else None
+                ),
             }
 
         if use_cache:
@@ -430,6 +491,69 @@ def generate_and_analyze_prev_focus(
                 for layer_cache in cache:
                     trimmed.append(tuple(cache_tensor[:, :end_idx, :] for cache_tensor in layer_cache))
                 return trimmed
+
+            def _gather_attention_rows(mask, positions):
+                if mask is None or mask == "full":
+                    return None
+                return mask.index_select(2, positions)
+
+            def _select_focus_candidates(prev_score_sums, prev_query_positions, prev_sample_pos, masked_positions):
+                if masked_positions.numel() == 0:
+                    return masked_positions
+                k = min(int(focus_topk), masked_positions.numel())
+                if (
+                    prev_score_sums is None
+                    or prev_query_positions is None
+                    or prev_sample_pos is None
+                ):
+                    return masked_positions[:k]
+
+                matches = (prev_query_positions[0] == int(prev_sample_pos)).nonzero(as_tuple=True)[0]
+                if matches.numel() == 0:
+                    return masked_positions[:k]
+
+                attention_scores = prev_score_sums[0, matches[0], masked_positions]
+                top_indices = torch.topk(attention_scores, k=k).indices
+                return masked_positions[top_indices]
+
+            def _sample_focus_logits(candidate_logits):
+                if alg == "origin":
+                    _, sampled_tokens = sample_tokens(
+                        candidate_logits,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=sample_top_k,
+                    )
+                    confidence = torch.zeros(
+                        candidate_logits.shape[0],
+                        device=candidate_logits.device,
+                        dtype=candidate_logits.dtype,
+                    )
+                    return confidence, sampled_tokens
+                if alg == "maskgit_plus":
+                    return sample_tokens(
+                        candidate_logits,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=sample_top_k,
+                    )
+                if alg == "topk_margin":
+                    return sample_tokens(
+                        candidate_logits,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=sample_top_k,
+                        margin_confidence=True,
+                    )
+                if alg == "entropy":
+                    return sample_tokens(
+                        candidate_logits,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=sample_top_k,
+                        neg_entropy=True,
+                    )
+                raise RuntimeError(f"Unknown alg: {alg}")
 
             for block_id in range(num_blocks):
                 block_start = prompt.shape[1] + block_id * block_length
@@ -446,6 +570,30 @@ def generate_and_analyze_prev_focus(
                     top_k=sample_top_k,
                 )
                 x[:, block_start] = x0[:, block_start]
+                prev_focus_scores = None
+                prev_focus_query_positions = None
+                last_sample_pos = None
+                focus_update_pos = deque(maxlen=int(focus_topk)) if focus_decode else None
+                focus_replace_position = torch.zeros_like(x, dtype=torch.bool) if focus_decode else None
+                focus_row_indices = (
+                    torch.arange(x.size(0), device=device).unsqueeze(1) if focus_decode else None
+                )
+                focus_full_confidence = None
+                focus_x_candidate = None
+                warmup_focus_info = None
+                if focus_decode:
+                    prev_focus_scores = focus_capture.get("score_sums")
+                    prev_focus_query_positions = focus_capture.get("query_position_ids")
+                    last_sample_pos = int(block_start)
+                    focus_update_pos.append(int(block_start))
+                    warmup_focus_info = {
+                        "mode": "warmup",
+                        "selected_pos": int(block_start),
+                        "sample_positions": None,
+                        "compute_positions": None,
+                        "focus_update_pos_before": [],
+                        "focus_update_pos_after": list(focus_update_pos),
+                    }
                 finalize_step(
                     block_id,
                     0,
@@ -454,6 +602,8 @@ def generate_and_analyze_prev_focus(
                     [(block_start, float(confidence[0, block_start].detach().float().cpu().item()))],
                     current_step_raw_scores,
                     query_position_offset=0,
+                    query_positions=list(range(x.shape[1])),
+                    focus_step_info=warmup_focus_info,
                 )
 
                 if not dual_cache:
@@ -464,126 +614,268 @@ def generate_and_analyze_prev_focus(
                     replace_position[:, block_start:block_end] = True
 
                 for i in range(1, inner_steps):
-                    if dual_cache:
+                    current_focus_info = None
+                    current_query_positions = None
+                    current_step_raw_scores = None
+                    if focus_decode:
+                        block_mask_index = (x[:, block_start:block_end] == mask_id)
+                        if not block_mask_index.any():
+                            break
+
+                        t = timesteps[i]
+                        s = timesteps[i + 1]
+                        masked_positions = torch.where(block_mask_index[0])[0] + block_start
+                        sample_positions = _select_focus_candidates(
+                            prev_focus_scores,
+                            prev_focus_query_positions,
+                            last_sample_pos,
+                            masked_positions,
+                        )
+                        if sample_positions.numel() == 0:
+                            raise RuntimeError("focus_decode selected no sample_positions")
+
+                        update_positions = torch.tensor(
+                            list(focus_update_pos),
+                            device=device,
+                            dtype=torch.long,
+                        )
+                        if dual_cache:
+                            sample_positions = torch.sort(sample_positions).values
+                            compute_positions = torch.cat([update_positions, sample_positions], dim=0)
+                            compute_positions = torch.sort(compute_positions).values
+                            sample_mask = torch.isin(compute_positions, sample_positions)
+
+                            current_x = x.index_select(1, compute_positions)
+                            current_attention_mask = _gather_attention_rows(model_attention_mask, compute_positions)
+                            current_position_ids = position_ids if position_ids is not None else None
+                            replace_position = focus_replace_position
+                            replace_position.zero_()
+                            replace_position[:, compute_positions] = True
+
+                            model_output = model(
+                                current_x,
+                                current_attention_mask,
+                                current_position_ids,
+                                past_key_values=past_key_values,
+                                use_cache=True,
+                                dual_cache=True,
+                                replace_position=replace_position,
+                            )
+                            past_key_values = model_output.past_key_values
+                            current_step_raw_scores = capture["raw_scores"]
+                            logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                            sample_logits = logits[:, sample_mask]
+                            current_query_positions = tensor_to_int_list(compute_positions)
+                        else:
+                            current_x = x[:, block_start:]
+                            current_position_ids = (
+                                position_ids[:, block_start:] if position_ids is not None else None
+                            )
+                            current_attention_mask = _gather_attention_rows(
+                                model_attention_mask,
+                                torch.arange(block_start, x.shape[1], device=device, dtype=torch.long),
+                            )
+
+                            model_output = model(
+                                current_x,
+                                current_attention_mask,
+                                current_position_ids,
+                                past_key_values=past_key_values,
+                                use_cache=True,
+                            )
+                            past_key_values = model_output.past_key_values
+                            current_step_raw_scores = capture["raw_scores"]
+                            logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                            block_logits = logits[:, :block_length]
+                            sample_logits = block_logits[:, sample_positions - block_start]
+                            current_query_positions = list(range(block_start, x.shape[1]))
+
+                        candidate_logits = sample_logits[0]
+                        confidence, sampled_tokens = _sample_focus_logits(candidate_logits)
+
+                        if (
+                            focus_full_confidence is None
+                            or focus_full_confidence.shape != (x.size(0), block_length)
+                            or focus_full_confidence.dtype != sample_logits.dtype
+                        ):
+                            focus_full_confidence = torch.empty(
+                                (x.size(0), block_length),
+                                device=device,
+                                dtype=sample_logits.dtype,
+                            )
+                        if focus_x_candidate is None or focus_x_candidate.shape != (x.size(0), block_length):
+                            focus_x_candidate = torch.empty(
+                                (x.size(0), block_length),
+                                device=device,
+                                dtype=torch.long,
+                            )
+                        full_confidence = focus_full_confidence
+                        full_confidence.fill_(-torch.inf)
+                        relative_sample_positions = sample_positions - block_start
+                        full_confidence[0, relative_sample_positions] = confidence
+
+                        x_candidate = focus_x_candidate
+                        x_candidate.fill_(mask_id)
+                        x_candidate[0, relative_sample_positions] = sampled_tokens
+
+                        if alg_temp is None or alg_temp == 0 or alg == "origin":
+                            _, transfer_index = torch.topk(full_confidence, 1)
+                        else:
+                            sampled_confidence = full_confidence / alg_temp
+                            sampled_confidence = F.softmax(sampled_confidence, dim=-1)
+                            transfer_index = torch.multinomial(sampled_confidence, num_samples=1)
+
+                        x[:, block_start:block_end][focus_row_indices, transfer_index] = (
+                            x_candidate[focus_row_indices, transfer_index]
+                        )
+                        selected_pos = int((transfer_index[0, 0] + block_start).item())
+                        selected_confidence = float(
+                            full_confidence[0, transfer_index[0, 0]].detach().float().cpu().item()
+                        )
+                        focus_update_before = list(focus_update_pos)
+                        focus_update_pos.append(selected_pos)
+                        last_sample_pos = selected_pos
+                        prev_focus_scores = focus_capture.get("score_sums")
+                        prev_focus_query_positions = focus_capture.get("query_position_ids")
+
+                        current_transfer_positions = [selected_pos]
+                        current_transfer_confidences = [selected_confidence]
+                        current_focus_info = {
+                            "mode": "focus_decode",
+                            "sample_positions": tensor_to_int_list(sample_positions),
+                            "compute_positions": current_query_positions,
+                            "update_positions": tensor_to_int_list(update_positions),
+                            "selected_pos": selected_pos,
+                            "focus_update_pos_before": focus_update_before,
+                            "focus_update_pos_after": list(focus_update_pos),
+                            "last_sample_pos": last_sample_pos,
+                        }
+                    elif dual_cache:
                         current_x = x[:, block_start:block_end]
                         current_position_ids = position_ids[:, block_start:block_end] if position_ids is not None else None
                     else:
                         current_x = x[:, block_start:]
                         current_position_ids = position_ids[:, block_start:] if position_ids is not None else None
 
-                    if attention_mask is not None and torch.any(attention_mask == 0.0):
-                        if dual_cache:
-                            current_attention_mask = model_attention_mask[:, :, block_start:block_end, :]
-                        else:
-                            current_attention_mask = model_attention_mask[:, :, block_start:, :]
-                    else:
-                        current_attention_mask = model_attention_mask
-
-                    if dual_cache:
-                        model_output = model(
-                            current_x,
-                            current_attention_mask,
-                            current_position_ids,
-                            past_key_values=past_key_values,
-                            use_cache=True,
-                            dual_cache=True,
-                            replace_position=replace_position,
-                        )
-                    else:
-                        model_output = model(
-                            current_x,
-                            current_attention_mask,
-                            current_position_ids,
-                            past_key_values=past_key_values,
-                            use_cache=True,
-                        )
-
-                    logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
-                    current_step_raw_scores = capture["raw_scores"]
-                    block_logits = logits[:, :block_length]
-                    block_mask_index = (x[:, block_start:block_end] == mask_id)
-                    if not block_mask_index.any():
-                        break
-
-                    t = timesteps[i]
-                    s = timesteps[i + 1]
-
-                    if alg == "origin":
-                        block_slice = x[:, block_start:block_end].clone()
-                        local_mask_index = (block_slice == mask_id)
-                        x0 = torch.full_like(block_slice[local_mask_index], mask_id)
-                        p_transfer = 1 - s / t if i < inner_steps - 1 else 1.0
-                        transfer_index_t_s = torch.rand(*x0.shape, device=device) < p_transfer
-                        if transfer_index_t_s.any():
-                            _, sampled = sample_tokens(
-                                block_logits[local_mask_index][transfer_index_t_s],
-                                temperature=temperature,
-                                top_p=top_p,
-                                top_k=sample_top_k,
-                            )
-                            x0[transfer_index_t_s] = sampled
-                        block_positions = torch.where(local_mask_index[0])[0]
-                        current_transfer_positions = (block_positions[transfer_index_t_s].detach().cpu() + block_start).tolist()
-                        current_transfer_confidences = [float("nan")] * len(current_transfer_positions)
-                        block_slice[local_mask_index] = x0.clone()
-                        x[:, block_start:block_end] = block_slice
-                    else:
-                        mask_logits = block_logits[block_mask_index]
-                        if mask_logits.numel() == 0:
-                            continue
-
-                        if alg == "maskgit_plus":
-                            confidence, x0 = sample_tokens(
-                                mask_logits,
-                                temperature=temperature,
-                                top_p=top_p,
-                                top_k=sample_top_k,
-                            )
-                        elif alg == "topk_margin":
-                            confidence, x0 = sample_tokens(
-                                mask_logits,
-                                temperature=temperature,
-                                top_p=top_p,
-                                top_k=sample_top_k,
-                                margin_confidence=True,
-                            )
-                        elif alg == "entropy":
-                            confidence, x0 = sample_tokens(
-                                mask_logits,
-                                temperature=temperature,
-                                top_p=top_p,
-                                top_k=sample_top_k,
-                                neg_entropy=True,
-                            )
-                        else:
-                            raise RuntimeError(f"Unknown alg: {alg}")
-
-                        full_confidence = torch.full_like(
-                            x[:, block_start:block_end], -torch.inf, dtype=block_logits.dtype, device=device
-                        )
-                        full_confidence[block_mask_index] = confidence
-                        x_candidate = torch.full_like(x[:, block_start:block_end], mask_id)
-                        x_candidate[block_mask_index] = x0.clone()
-                        num_mask_token = (block_mask_index.sum() / block_mask_index.shape[0]).detach().float().cpu().item()
-                        number_transfer_tokens = int(num_mask_token * (1 - s / t)) if i < inner_steps - 1 else int(num_mask_token)
-                        current_transfer_positions = []
-                        current_transfer_confidences = []
-
-                        if number_transfer_tokens > 0:
-                            if alg_temp is None or alg_temp == 0:
-                                _, transfer_index = torch.topk(full_confidence, number_transfer_tokens)
+                    if not (dual_cache and focus_decode):
+                        if attention_mask is not None and torch.any(attention_mask == 0.0):
+                            if dual_cache:
+                                current_attention_mask = model_attention_mask[:, :, block_start:block_end, :]
                             else:
-                                sampled_confidence = full_confidence / alg_temp
-                                sampled_confidence = F.softmax(sampled_confidence, dim=-1)
-                                transfer_index = torch.multinomial(
-                                    sampled_confidence, num_samples=number_transfer_tokens
-                                )
-                            row_indices = torch.arange(x.size(0), device=device).unsqueeze(1).expand_as(transfer_index)
-                            x[:, block_start:block_end][row_indices, transfer_index] = x_candidate[row_indices, transfer_index]
-                            current_transfer_positions = (transfer_index[0].detach().cpu() + block_start).tolist()
-                            current_transfer_confidences = (
-                                full_confidence[0, transfer_index[0]].detach().float().cpu().tolist()
+                                current_attention_mask = model_attention_mask[:, :, block_start:, :]
+                        else:
+                            current_attention_mask = model_attention_mask
+
+                        if dual_cache:
+                            model_output = model(
+                                current_x,
+                                current_attention_mask,
+                                current_position_ids,
+                                past_key_values=past_key_values,
+                                use_cache=True,
+                                dual_cache=True,
+                                replace_position=replace_position,
                             )
+                        else:
+                            model_output = model(
+                                current_x,
+                                current_attention_mask,
+                                current_position_ids,
+                                past_key_values=past_key_values,
+                                use_cache=True,
+                            )
+
+                        logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                        current_step_raw_scores = capture["raw_scores"]
+                        block_logits = logits[:, :block_length]
+                        block_mask_index = (x[:, block_start:block_end] == mask_id)
+                        if not block_mask_index.any():
+                            break
+
+                        t = timesteps[i]
+                        s = timesteps[i + 1]
+
+                        if alg == "origin":
+                            block_slice = x[:, block_start:block_end].clone()
+                            local_mask_index = (block_slice == mask_id)
+                            x0 = torch.full_like(block_slice[local_mask_index], mask_id)
+                            p_transfer = 1 - s / t if i < inner_steps - 1 else 1.0
+                            transfer_index_t_s = torch.rand(*x0.shape, device=device) < p_transfer
+                            if transfer_index_t_s.any():
+                                _, sampled = sample_tokens(
+                                    block_logits[local_mask_index][transfer_index_t_s],
+                                    temperature=temperature,
+                                    top_p=top_p,
+                                    top_k=sample_top_k,
+                                )
+                                x0[transfer_index_t_s] = sampled
+                            block_positions = torch.where(local_mask_index[0])[0]
+                            current_transfer_positions = (block_positions[transfer_index_t_s].detach().cpu() + block_start).tolist()
+                            current_transfer_confidences = [float("nan")] * len(current_transfer_positions)
+                            block_slice[local_mask_index] = x0.clone()
+                            x[:, block_start:block_end] = block_slice
+                        else:
+                            mask_logits = block_logits[block_mask_index]
+                            if mask_logits.numel() == 0:
+                                continue
+
+                            if alg == "maskgit_plus":
+                                confidence, x0 = sample_tokens(
+                                    mask_logits,
+                                    temperature=temperature,
+                                    top_p=top_p,
+                                    top_k=sample_top_k,
+                                )
+                            elif alg == "topk_margin":
+                                confidence, x0 = sample_tokens(
+                                    mask_logits,
+                                    temperature=temperature,
+                                    top_p=top_p,
+                                    top_k=sample_top_k,
+                                    margin_confidence=True,
+                                )
+                            elif alg == "entropy":
+                                confidence, x0 = sample_tokens(
+                                    mask_logits,
+                                    temperature=temperature,
+                                    top_p=top_p,
+                                    top_k=sample_top_k,
+                                    neg_entropy=True,
+                                )
+                            else:
+                                raise RuntimeError(f"Unknown alg: {alg}")
+
+                            full_confidence = torch.full_like(
+                                x[:, block_start:block_end], -torch.inf, dtype=block_logits.dtype, device=device
+                            )
+                            full_confidence[block_mask_index] = confidence
+                            x_candidate = torch.full_like(x[:, block_start:block_end], mask_id)
+                            x_candidate[block_mask_index] = x0.clone()
+                            num_mask_token = (block_mask_index.sum() / block_mask_index.shape[0]).detach().float().cpu().item()
+                            number_transfer_tokens = int(num_mask_token * (1 - s / t)) if i < inner_steps - 1 else int(num_mask_token)
+                            current_transfer_positions = []
+                            current_transfer_confidences = []
+
+                            if number_transfer_tokens > 0:
+                                if alg_temp is None or alg_temp == 0:
+                                    _, transfer_index = torch.topk(full_confidence, number_transfer_tokens)
+                                else:
+                                    sampled_confidence = full_confidence / alg_temp
+                                    sampled_confidence = F.softmax(sampled_confidence, dim=-1)
+                                    transfer_index = torch.multinomial(
+                                        sampled_confidence, num_samples=number_transfer_tokens
+                                    )
+                                row_indices = torch.arange(x.size(0), device=device).unsqueeze(1).expand_as(transfer_index)
+                                x[:, block_start:block_end][row_indices, transfer_index] = x_candidate[row_indices, transfer_index]
+                                current_transfer_positions = (transfer_index[0].detach().cpu() + block_start).tolist()
+                                current_transfer_confidences = (
+                                    full_confidence[0, transfer_index[0]].detach().float().cpu().tolist()
+                                )
+                        current_query_positions = (
+                            list(range(block_start, block_end))
+                            if dual_cache
+                            else list(range(block_start, x.shape[1]))
+                        )
 
                     finalize_step(
                         block_id,
@@ -593,6 +885,8 @@ def generate_and_analyze_prev_focus(
                         zip(current_transfer_positions, current_transfer_confidences),
                         current_step_raw_scores,
                         query_position_offset=block_start,
+                        query_positions=current_query_positions,
+                        focus_step_info=current_focus_info,
                     )
 
                     if not (x[:, block_start:block_end] == mask_id).any():
@@ -724,13 +1018,16 @@ def generate_and_analyze_prev_focus(
                 "cache_mode": cache_mode,
                 "use_cache": bool(use_cache),
                 "dual_cache": bool(dual_cache),
+                "focus_decode": bool(focus_decode),
+                "focus_layer": int(focus_layer),
+                "focus_topk": None if focus_topk is None else int(focus_topk),
                 "analyzed_layer_index": int(target_block_index),
-                "analyzed_layer_from_end": int(analyze_layer_from_end),
                 "total_layers": int(total_layers),
             },
         }
     finally:
-        restore_fn()
+        for callback in reversed(restore_callbacks):
+            callback()
 
 
 
@@ -744,7 +1041,7 @@ def parse_args():
     parser.add_argument("--gen_length", type=int, default=512)
     parser.add_argument("--block_length", type=int, default=None)
     parser.add_argument("--topk", type=int, default=8)
-    parser.add_argument("--analyze_layer_from_end", type=int, default=1)
+    parser.add_argument("--focus_layer", type=int, default=1)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--mask_id", type=int, default=None)
     parser.add_argument("--top_p", type=float, default=0.95)
@@ -762,6 +1059,14 @@ def parse_args():
         type=str,
         default="no_cache",
         choices=["no_cache", "use_cache", "dual_cache"],
+    )
+    parser.add_argument("--focus_decode", action="store_true")
+    parser.add_argument("--focus_topk", type=int, default=8)
+    parser.add_argument(
+        "--analyze_layer_from_end",
+        dest="focus_layer",
+        type=int,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--output_prefix", type=str, default="dream_prev_focus")
     return parser.parse_args()
@@ -826,9 +1131,11 @@ def main():
         alg=args.alg,
         alg_temp=args.alg_temp,
         topk=args.topk,
-        analyze_layer_from_end=args.analyze_layer_from_end,
+        focus_layer=args.focus_layer,
         use_cache=args.cache_mode in {"use_cache", "dual_cache"},
         dual_cache=args.cache_mode == "dual_cache",
+        focus_decode=args.focus_decode,
+        focus_topk=args.focus_topk,
     )
 
     final_ids = result["final_ids"]
