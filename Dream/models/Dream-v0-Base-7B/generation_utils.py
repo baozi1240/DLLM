@@ -640,31 +640,45 @@ class DreamGenerationMixin:
                 focus_replace_position = torch.zeros_like(x, dtype=torch.bool) if focus_decode else None
                 focus_full_confidence = None
                 focus_x_candidate = None
-                for block_id in range(num_blocks):
-                    current_block_start = input_ids.shape[1] + block_id * block_length
-                    current_block_end = current_block_start + block_length
-                
+                prev_focus_scores = None
+                prev_focus_compute_indices = None
+                last_sample_index = None
+                past_key_values = None
+                focus_update_indices = deque(maxlen=int(focus_topk)) if focus_decode else None
 
-                    # 1) KV cache warmup & first sampling TODO: remove warmup
+                if focus_decode:
                     model_output = self(x, attention_mask, tok_idx, use_cache=True)
                     past_key_values = model_output.past_key_values
                     logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
                     _, x0 = sample_tokens(logits, temperature=temperature, top_p=top_p, top_k=top_k)
-                    x[:, current_block_start] = x0[:, current_block_start]
 
-                    prev_focus_scores = None
-                    prev_focus_compute_indices = None
-                    last_sample_index = None
-                    focus_update_indices = deque(maxlen=int(focus_topk)) if focus_decode else None
+                    first_decode_position = input_ids.shape[1]
+                    x[:, first_decode_position] = x0[:, first_decode_position]
+                    prev_focus_scores = focus_capture.get("score_sums")
+                    prev_focus_compute_indices = torch.arange(
+                        x.shape[1],
+                        device=x.device,
+                        dtype=torch.long,
+                    ).unsqueeze(0)
+                    last_sample_index = int(first_decode_position)
+                    focus_update_indices.append(last_sample_index)
+
+                for block_id in range(num_blocks):
+                    current_block_start = input_ids.shape[1] + block_id * block_length
+                    current_block_end = current_block_start + block_length
+
+                    if not focus_decode:
+                        # Dual-cache relies on a full-sequence warmup so cached positions match the
+                        # absolute indices encoded in `replace_position`.
+                        model_output = self(x, attention_mask, tok_idx, use_cache=True)
+                        past_key_values = model_output.past_key_values
+                        logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                        _, x0 = sample_tokens(logits, temperature=temperature, top_p=top_p, top_k=top_k)
+                        x[:, current_block_start] = x0[:, current_block_start]
+
                     if focus_decode:
-                        prev_focus_scores = focus_capture.get("score_sums")
-                        prev_focus_compute_indices = torch.arange(
-                            x.shape[1],
-                            device=x.device,
-                            dtype=torch.long,
-                        ).unsqueeze(0)
-                        last_sample_index = int(current_block_start)
-                        focus_update_indices.append(int(current_block_start))
+                        if prev_focus_scores is None or prev_focus_compute_indices is None or last_sample_index is None:
+                            raise RuntimeError("Missing focus state before entering block decoding.")
 
                     if not dual_cache:
                         past_key_values = _trim_past_key_values(past_key_values, current_block_start)
@@ -673,7 +687,8 @@ class DreamGenerationMixin:
                         replace_position = torch.zeros_like(x, dtype=torch.bool)
                         replace_position[:, current_block_start:current_block_end] = True
 
-                    for i in range(1, inner_steps):
+                    block_step_start = 1 if (not focus_decode or block_id == 0) else 0
+                    for i in range(block_step_start, inner_steps):
                         t = timesteps[i]
                         s = timesteps[i + 1]
                         block_mask_index = (x[:, current_block_start:current_block_end] == mask_token_id)
