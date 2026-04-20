@@ -423,14 +423,19 @@ def generate_and_analyze_prev_focus(
                         any_hit = 0
 
                         for prev_pos in prev_decoded_positions.tolist():
+                            # In the shifted causal logits setup, token at `prev_pos`
+                            # is produced by the query at `prev_pos - 1`.
+                            prev_query_pos = prev_pos - 1
+                            if prev_query_pos < 0:
+                                continue
                             prev_query_idx = None
                             if prev_query_positions is not None:
-                                matches = (prev_query_positions == prev_pos).nonzero(as_tuple=True)[0]
+                                matches = (prev_query_positions == prev_query_pos).nonzero(as_tuple=True)[0]
                                 if matches.numel() == 0:
                                     continue
                                 prev_query_idx = int(matches[0].item())
                             else:
-                                prev_query_idx = prev_pos - prev_query_position_offset
+                                prev_query_idx = prev_query_pos - prev_query_position_offset
                                 if not (0 <= prev_query_idx < agg_scores.shape[0]):
                                     continue
 
@@ -497,18 +502,27 @@ def generate_and_analyze_prev_focus(
                     return None
                 return mask.index_select(2, positions)
 
-            def _select_focus_candidates(prev_score_sums, prev_query_positions, prev_sample_pos, masked_positions):
+            def _token_position_to_query_position(token_position: int) -> int:
+                query_position = int(token_position) - 1
+                if query_position < 0:
+                    raise RuntimeError(
+                        f"Invalid token position {token_position} for shifted logits decoding."
+                    )
+                return query_position
+
+            def _select_focus_candidates(prev_score_sums, prev_query_positions, prev_sampled_position, masked_positions):
                 if masked_positions.numel() == 0:
                     return masked_positions
                 k = min(int(focus_topk), masked_positions.numel())
                 if (
                     prev_score_sums is None
                     or prev_query_positions is None
-                    or prev_sample_pos is None
+                    or prev_sampled_position is None
                 ):
                     return masked_positions[:k]
 
-                matches = (prev_query_positions[0] == int(prev_sample_pos)).nonzero(as_tuple=True)[0]
+                prev_sample_query_pos = _token_position_to_query_position(prev_sampled_position)
+                matches = (prev_query_positions[0] == int(prev_sample_query_pos)).nonzero(as_tuple=True)[0]
                 if matches.numel() == 0:
                     return masked_positions[:k]
 
@@ -555,56 +569,96 @@ def generate_and_analyze_prev_focus(
                     )
                 raise RuntimeError(f"Unknown alg: {alg}")
 
-            for block_id in range(num_blocks):
-                block_start = prompt.shape[1] + block_id * block_length
-                block_end = block_start + block_length
+            past_key_values = None
+            prev_focus_scores = None
+            prev_focus_query_positions = None
+            last_sampled_position = None
+            focus_update_query_positions = deque(maxlen=int(focus_topk)) if focus_decode else None
+            focus_replace_position = torch.zeros_like(x, dtype=torch.bool) if focus_decode else None
+            focus_row_indices = (
+                torch.arange(x.size(0), device=device).unsqueeze(1) if focus_decode else None
+            )
+            focus_full_confidence = None
+            focus_x_candidate = None
 
+            if focus_decode:
                 model_output = model(x, model_attention_mask, position_ids, use_cache=True)
                 past_key_values = model_output.past_key_values
                 logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
                 current_step_raw_scores = capture["raw_scores"]
-                confidence, x0 = sample_tokens(
+                _, x0 = sample_tokens(
                     logits,
                     temperature=temperature,
                     top_p=top_p,
                     top_k=sample_top_k,
                 )
-                x[:, block_start] = x0[:, block_start]
-                prev_focus_scores = None
-                prev_focus_query_positions = None
-                last_sample_pos = None
-                focus_update_pos = deque(maxlen=int(focus_topk)) if focus_decode else None
-                focus_replace_position = torch.zeros_like(x, dtype=torch.bool) if focus_decode else None
-                focus_row_indices = (
-                    torch.arange(x.size(0), device=device).unsqueeze(1) if focus_decode else None
+
+                first_decode_position = prompt.shape[1]
+                x[:, first_decode_position] = x0[:, first_decode_position]
+                prev_focus_scores = focus_capture.get("score_sums")
+                prev_focus_query_positions = torch.arange(
+                    x.shape[1],
+                    device=device,
+                    dtype=torch.long,
+                ).unsqueeze(0)
+                last_sampled_position = int(first_decode_position)
+                focus_update_query_positions.append(
+                    _token_position_to_query_position(first_decode_position)
                 )
-                focus_full_confidence = None
-                focus_x_candidate = None
-                warmup_focus_info = None
-                if focus_decode:
-                    prev_focus_scores = focus_capture.get("score_sums")
-                    prev_focus_query_positions = focus_capture.get("query_position_ids")
-                    last_sample_pos = int(block_start)
-                    focus_update_pos.append(int(block_start))
-                    warmup_focus_info = {
-                        "mode": "warmup",
-                        "selected_pos": int(block_start),
-                        "sample_positions": None,
-                        "compute_positions": None,
-                        "focus_update_pos_before": [],
-                        "focus_update_pos_after": list(focus_update_pos),
-                    }
                 finalize_step(
-                    block_id,
                     0,
-                    block_start,
-                    block_end,
-                    [(block_start, float(confidence[0, block_start].detach().float().cpu().item()))],
+                    0,
+                    first_decode_position,
+                    first_decode_position + block_length,
+                    [(first_decode_position, float("nan"))],
                     current_step_raw_scores,
                     query_position_offset=0,
                     query_positions=list(range(x.shape[1])),
-                    focus_step_info=warmup_focus_info,
+                    focus_step_info={
+                        "mode": "warmup",
+                        "selected_pos": int(first_decode_position),
+                        "selected_query_pos": _token_position_to_query_position(first_decode_position),
+                        "sample_positions": None,
+                        "compute_positions": None,
+                        "focus_update_pos_before": [],
+                        "focus_update_pos_after": list(focus_update_query_positions),
+                    },
                 )
+
+            for block_id in range(num_blocks):
+                block_start = prompt.shape[1] + block_id * block_length
+                block_end = block_start + block_length
+
+                if not focus_decode:
+                    model_output = model(x, model_attention_mask, position_ids, use_cache=True)
+                    past_key_values = model_output.past_key_values
+                    logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                    current_step_raw_scores = capture["raw_scores"]
+                    confidence, x0 = sample_tokens(
+                        logits,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=sample_top_k,
+                    )
+                    x[:, block_start] = x0[:, block_start]
+                    finalize_step(
+                        block_id,
+                        0,
+                        block_start,
+                        block_end,
+                        [(block_start, float(confidence[0, block_start].detach().float().cpu().item()))],
+                        current_step_raw_scores,
+                        query_position_offset=0,
+                        query_positions=list(range(x.shape[1])),
+                        focus_step_info=None,
+                    )
+                else:
+                    if (
+                        prev_focus_scores is None
+                        or prev_focus_query_positions is None
+                        or last_sampled_position is None
+                    ):
+                        raise RuntimeError("Missing focus state before entering block decoding.")
 
                 if not dual_cache:
                     past_key_values = _trim_past_key_values(past_key_values, block_start)
@@ -613,7 +667,8 @@ def generate_and_analyze_prev_focus(
                     replace_position = torch.zeros_like(x, dtype=torch.bool)
                     replace_position[:, block_start:block_end] = True
 
-                for i in range(1, inner_steps):
+                block_step_start = 1 if (not focus_decode or block_id == 0) else 0
+                for i in range(block_step_start, inner_steps):
                     current_focus_info = None
                     current_query_positions = None
                     current_step_raw_scores = None
@@ -625,25 +680,27 @@ def generate_and_analyze_prev_focus(
                         t = timesteps[i]
                         s = timesteps[i + 1]
                         masked_positions = torch.where(block_mask_index[0])[0] + block_start
-                        sample_positions = _select_focus_candidates(
+                        analysis_focus_positions = _select_focus_candidates(
                             prev_focus_scores,
                             prev_focus_query_positions,
-                            last_sample_pos,
+                            last_sampled_position,
                             masked_positions,
                         )
-                        if sample_positions.numel() == 0:
-                            raise RuntimeError("focus_decode selected no sample_positions")
+                        if masked_positions.numel() == 0:
+                            raise RuntimeError("focus_decode found no masked_positions")
 
                         update_positions = torch.tensor(
-                            list(focus_update_pos),
+                            list(focus_update_query_positions),
                             device=device,
                             dtype=torch.long,
                         )
+                        sample_positions = torch.sort(masked_positions).values
                         if dual_cache:
-                            sample_positions = torch.sort(sample_positions).values
-                            compute_positions = torch.cat([update_positions, sample_positions], dim=0)
-                            compute_positions = torch.sort(compute_positions).values
-                            sample_mask = torch.isin(compute_positions, sample_positions)
+                            sample_query_positions = sample_positions - 1
+                            sample_query_positions = torch.sort(sample_query_positions).values
+                            compute_positions = torch.cat([update_positions, sample_query_positions], dim=0)
+                            compute_positions = torch.unique(torch.sort(compute_positions).values)
+                            sample_mask = torch.isin(compute_positions, sample_query_positions)
 
                             current_x = x.index_select(1, compute_positions)
                             current_attention_mask = _gather_attention_rows(model_attention_mask, compute_positions)
@@ -663,8 +720,7 @@ def generate_and_analyze_prev_focus(
                             )
                             past_key_values = model_output.past_key_values
                             current_step_raw_scores = capture["raw_scores"]
-                            logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
-                            sample_logits = logits[:, sample_mask]
+                            sample_logits = model_output.logits[:, sample_mask]
                             current_query_positions = tensor_to_int_list(compute_positions)
                         else:
                             current_x = x[:, block_start:]
@@ -718,37 +774,64 @@ def generate_and_analyze_prev_focus(
                         x_candidate.fill_(mask_id)
                         x_candidate[0, relative_sample_positions] = sampled_tokens
 
-                        if alg_temp is None or alg_temp == 0 or alg == "origin":
-                            _, transfer_index = torch.topk(full_confidence, 1)
-                        else:
-                            sampled_confidence = full_confidence / alg_temp
-                            sampled_confidence = F.softmax(sampled_confidence, dim=-1)
-                            transfer_index = torch.multinomial(sampled_confidence, num_samples=1)
+                        num_mask_token = (block_mask_index.sum() / block_mask_index.shape[0]).detach().float().cpu().item()
+                        number_transfer_tokens = (
+                            int(num_mask_token * (1 - s / t)) if i < inner_steps - 1 else int(num_mask_token)
+                        )
 
-                        x[:, block_start:block_end][focus_row_indices, transfer_index] = (
-                            x_candidate[focus_row_indices, transfer_index]
-                        )
-                        selected_pos = int((transfer_index[0, 0] + block_start).item())
-                        selected_confidence = float(
-                            full_confidence[0, transfer_index[0, 0]].detach().float().cpu().item()
-                        )
-                        focus_update_before = list(focus_update_pos)
-                        focus_update_pos.append(selected_pos)
-                        last_sample_pos = selected_pos
+                        current_transfer_positions = []
+                        current_transfer_confidences = []
+                        focus_update_before = list(focus_update_query_positions)
+                        if number_transfer_tokens > 0:
+                            if alg_temp is None or alg_temp == 0 or alg == "origin":
+                                _, transfer_index = torch.topk(full_confidence, number_transfer_tokens)
+                            else:
+                                sampled_confidence = full_confidence / alg_temp
+                                sampled_confidence = F.softmax(sampled_confidence, dim=-1)
+                                transfer_index = torch.multinomial(
+                                    sampled_confidence, num_samples=number_transfer_tokens
+                                )
+
+                            x[:, block_start:block_end][focus_row_indices, transfer_index] = (
+                                x_candidate[focus_row_indices, transfer_index]
+                            )
+                            current_transfer_positions = (
+                                transfer_index[0].detach().cpu() + block_start
+                            ).tolist()
+                            current_transfer_confidences = (
+                                full_confidence[0, transfer_index[0]].detach().float().cpu().tolist()
+                            )
+                            for selected_pos in current_transfer_positions:
+                                focus_update_query_positions.append(
+                                    _token_position_to_query_position(selected_pos)
+                                )
+                            last_sampled_position = int(current_transfer_positions[-1])
+
                         prev_focus_scores = focus_capture.get("score_sums")
                         prev_focus_query_positions = focus_capture.get("query_position_ids")
-
-                        current_transfer_positions = [selected_pos]
-                        current_transfer_confidences = [selected_confidence]
                         current_focus_info = {
                             "mode": "focus_decode",
                             "sample_positions": tensor_to_int_list(sample_positions),
+                            "prev_focus_positions": tensor_to_int_list(analysis_focus_positions),
                             "compute_positions": current_query_positions,
                             "update_positions": tensor_to_int_list(update_positions),
-                            "selected_pos": selected_pos,
+                            "selected_pos": (
+                                int(current_transfer_positions[-1]) if current_transfer_positions else None
+                            ),
+                            "selected_positions": current_transfer_positions,
+                            "selected_query_pos": (
+                                _token_position_to_query_position(current_transfer_positions[-1])
+                                if current_transfer_positions
+                                else None
+                            ),
                             "focus_update_pos_before": focus_update_before,
-                            "focus_update_pos_after": list(focus_update_pos),
-                            "last_sample_pos": last_sample_pos,
+                            "focus_update_pos_after": list(focus_update_query_positions),
+                            "last_sample_query_pos": (
+                                _token_position_to_query_position(last_sampled_position)
+                                if last_sampled_position is not None
+                                else None
+                            ),
+                            "number_transfer_tokens": int(number_transfer_tokens),
                         }
                     elif dual_cache:
                         current_x = x[:, block_start:block_end]

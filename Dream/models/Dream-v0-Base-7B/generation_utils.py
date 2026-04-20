@@ -587,9 +587,16 @@ class DreamGenerationMixin:
                     return mask
                 return mask.index_select(2, query_indices)
 
-            def _select_focus_indices(prev_score_sums, prev_compute_indices, last_sample_index, masked_indices):
+            def _token_index_to_query_index(token_index: int) -> int:
+                query_index = int(token_index) - 1
+                if query_index < 0:
+                    raise RuntimeError(f"Invalid token index {token_index} for shifted logits decoding.")
+                return query_index
+
+            def _select_focus_indices(prev_score_sums, prev_compute_indices, last_sampled_index, masked_indices):
                 k = min(int(focus_topk), masked_indices.numel())
-                query_match = (prev_compute_indices[0] == int(last_sample_index)).nonzero(as_tuple=True)[0]
+                last_sample_query_index = _token_index_to_query_index(last_sampled_index)
+                query_match = (prev_compute_indices[0] == int(last_sample_query_index)).nonzero(as_tuple=True)[0]
                 if query_match.numel() == 0:
                     raise RuntimeError("Unable to align the last sampled index with captured focus attention rows.")
 
@@ -642,9 +649,9 @@ class DreamGenerationMixin:
                 focus_x_candidate = None
                 prev_focus_scores = None
                 prev_focus_compute_indices = None
-                last_sample_index = None
+                last_sampled_index = None
                 past_key_values = None
-                focus_update_indices = deque(maxlen=int(focus_topk)) if focus_decode else None
+                focus_update_query_indices = deque(maxlen=int(focus_topk)) if focus_decode else None
 
                 if focus_decode:
                     model_output = self(x, attention_mask, tok_idx, use_cache=True)
@@ -660,8 +667,8 @@ class DreamGenerationMixin:
                         device=x.device,
                         dtype=torch.long,
                     ).unsqueeze(0)
-                    last_sample_index = int(first_decode_position)
-                    focus_update_indices.append(last_sample_index)
+                    last_sampled_index = int(first_decode_position)
+                    focus_update_query_indices.append(_token_index_to_query_index(first_decode_position))
 
                 for block_id in range(num_blocks):
                     current_block_start = input_ids.shape[1] + block_id * block_length
@@ -677,7 +684,7 @@ class DreamGenerationMixin:
                         x[:, current_block_start] = x0[:, current_block_start]
 
                     if focus_decode:
-                        if prev_focus_scores is None or prev_focus_compute_indices is None or last_sample_index is None:
+                        if prev_focus_scores is None or prev_focus_compute_indices is None or last_sampled_index is None:
                             raise RuntimeError("Missing focus state before entering block decoding.")
 
                     if not dual_cache:
@@ -701,25 +708,27 @@ class DreamGenerationMixin:
                             sample_indices = _select_focus_indices(
                                 prev_focus_scores,
                                 prev_focus_compute_indices,
-                                last_sample_index,
+                                last_sampled_index,
                                 masked_indices,
                             )
                             assert sample_indices.numel() != 0
 
                             update_indices = torch.tensor(
-                                list(focus_update_indices),
+                                list(focus_update_query_indices),
                                 device=x.device,
                                 dtype=torch.long,
                             )
                             if dual_cache:
-                                # `sample_indices` stay masked and need decoding; `update_indices` are recent
-                                # non-masked tokens whose KV/cache rows are refreshed together with the samples.
+                                sample_query_indices = sample_indices - 1
+                                # `sample_indices` are token positions to decode; both them and the KV
+                                # refresh window must be mapped to query positions under shifted logits.
                                 sample_indices = torch.sort(sample_indices).values
-                                compute_indices = torch.cat([update_indices, sample_indices], dim=0)
+                                sample_query_indices = torch.sort(sample_query_indices).values
+                                compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
                                 # Keep the query order aligned with `replace_position.nonzero()`, which is also
                                 # the order used later for RoPE gathering and KV cache write-back.
-                                compute_indices = torch.sort(compute_indices).values
-                                sample_mask = torch.isin(compute_indices, sample_indices)
+                                compute_indices = torch.unique(torch.sort(compute_indices).values)
+                                sample_mask = torch.isin(compute_indices, sample_query_indices)
 
                                 current_x = x.index_select(1, compute_indices)
                                 current_attention_mask = _gather_attention_rows(attention_mask, compute_indices)
@@ -738,8 +747,7 @@ class DreamGenerationMixin:
                                     replace_position=replace_position,
                                 )
                                 past_key_values = model_output.past_key_values
-                                logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
-                                sample_logits = logits[:, sample_mask]
+                                sample_logits = model_output.logits[:, sample_mask]
                                 current_compute_indices = compute_indices.unsqueeze(0)
                             else:
                                 current_x = x[:, current_block_start:]
@@ -809,8 +817,8 @@ class DreamGenerationMixin:
                                 x_candidate[row_indices, transfer_index]
                             )
                             selected_index = int((transfer_index[0, 0] + current_block_start).item())
-                            focus_update_indices.append(selected_index)
-                            last_sample_index = selected_index
+                            focus_update_query_indices.append(_token_index_to_query_index(selected_index))
+                            last_sampled_index = selected_index
                             prev_focus_scores = focus_capture.get("score_sums")
                             prev_focus_compute_indices = current_compute_indices
                         else:
