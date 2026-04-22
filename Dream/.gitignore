@@ -8,4 +8,6 @@ stats/
 *.jsonl
 debug*
 *sweeps/
-
+data/
+*results/
+*Fastdllm/
