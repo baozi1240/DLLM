@@ -896,7 +896,7 @@ class DreamGenerationMixin:
         prev_focus_compute_indices = None
         last_sampled_index = None
         past_key_values = None
-        focus_update_query_indices = deque(maxlen=int(focus_topk))
+        focus_update_token_indices = deque(maxlen=int(focus_topk))
 
         try:
             model_output = self(x, attention_mask, tok_idx, use_cache=True)
@@ -913,7 +913,7 @@ class DreamGenerationMixin:
                 dtype=torch.long,
             ).unsqueeze(0)
             last_sampled_index = int(first_decode_position)
-            focus_update_query_indices.append(self._token_index_to_query_index(first_decode_position))
+            focus_update_token_indices.append(int(first_decode_position))
 
             for block_id in range(num_blocks):
                 current_block_start = input_ids.shape[1] + block_id * block_length
@@ -939,11 +939,12 @@ class DreamGenerationMixin:
                         raise RuntimeError("focus_decode found no sample indices.")
 
                     update_indices = torch.tensor(
-                        list(focus_update_query_indices),
+                        list(focus_update_token_indices),
                         device=x.device,
                         dtype=torch.long,
                     )
                     sample_indices = torch.sort(sample_indices).values
+                    # Sampling still consumes the previous query row, but KV refresh now targets the unmasked token itself.
                     sample_query_indices = torch.sort(sample_indices - 1).values
                     compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
                     compute_indices = torch.unique(torch.sort(compute_indices).values)
@@ -1017,7 +1018,7 @@ class DreamGenerationMixin:
                     )
 
                     selected_index = int((transfer_index[0, 0] + current_block_start).item())
-                    focus_update_query_indices.append(self._token_index_to_query_index(selected_index))
+                    focus_update_token_indices.append(selected_index) # KV update 用 unmasked token 本身，而不是前一个位置
                     last_sampled_index = selected_index
                     prev_focus_scores = focus_capture.get("score_sums")
                     prev_focus_compute_indices = current_compute_indices
