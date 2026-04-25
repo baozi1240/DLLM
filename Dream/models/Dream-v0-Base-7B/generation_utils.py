@@ -191,7 +191,7 @@ def _patch_attention_for_raw_scores(target_block):
                 attn_bias = attn_bias.to(dtype=raw_scores.dtype)
             raw_scores = raw_scores + attn_bias
 
-        capture["score_sums"] = raw_scores.detach().float().sum(dim=1)
+        capture["score"] = raw_scores.detach()
 
         attn_weights = torch.nn.functional.softmax(raw_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = torch.nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
@@ -892,7 +892,7 @@ class DreamGenerationMixin:
         focus_replace_position = torch.zeros_like(x, dtype=torch.bool)
         focus_full_confidence = None
         focus_x_candidate = None
-        prev_focus_scores = None
+        prev_focus_score = None
         prev_focus_compute_indices = None
         last_sampled_index = None
         past_key_values = None
@@ -906,7 +906,7 @@ class DreamGenerationMixin:
 
             first_decode_position = input_ids.shape[1]
             x[:, first_decode_position] = x0[:, first_decode_position]
-            prev_focus_scores = focus_capture.get("score_sums")
+            prev_focus_score = focus_capture.get("score")
             prev_focus_compute_indices = torch.arange(
                 x.shape[1],
                 device=x.device,
@@ -929,10 +929,12 @@ class DreamGenerationMixin:
 
                     masked_indices = torch.where(block_mask_index[0])[0] + current_block_start
                     sample_query_indices = self._select_focus_query_indices(
-                        prev_score_sums=prev_focus_scores,
+                        prev_score=prev_focus_score,
                         prev_compute_indices=prev_focus_compute_indices,
                         last_sampled_index=last_sampled_index,
                         masked_indices=masked_indices,
+                        block_start=current_block_start,
+                        block_end=current_block_end,
                         focus_topk=int(focus_topk),
                     )
                     if sample_query_indices.numel() == 0:
@@ -1019,7 +1021,7 @@ class DreamGenerationMixin:
                     selected_index = int((transfer_index[0, 0] + current_block_start).item())
                     focus_update_token_indices.append(selected_index) # KV update 用 unmasked token 本身，而不是前一个位置
                     last_sampled_index = selected_index
-                    prev_focus_scores = focus_capture.get("score_sums")
+                    prev_focus_score = focus_capture.get("score")
                     prev_focus_compute_indices = current_compute_indices
 
                     if histories is not None:
@@ -1060,10 +1062,12 @@ class DreamGenerationMixin:
 
     def _select_focus_query_indices(
         self,
-        prev_score_sums,
+        prev_score,
         prev_compute_indices,
         last_sampled_index: int,
         masked_indices: torch.LongTensor,
+        block_start: int,
+        block_end: int,
         focus_topk: int,
     ) -> torch.LongTensor:
         query_candidate_indices = masked_indices - 1
@@ -1076,8 +1080,25 @@ class DreamGenerationMixin:
         query_match = (prev_compute_indices[0] == int(last_sample_query_index)).nonzero(as_tuple=True)[0]
         if query_match.numel() == 0:
             raise RuntimeError("Unable to align the last sampled index with captured focus attention rows.")
-        attention_scores = prev_score_sums[0, query_match[0], query_candidate_indices]
-        top_indices = torch.topk(attention_scores, k=k).indices
+        q_row = int(query_match[0].item())
+
+        # 当前 block 的计算位置（下一步要计算的 query 位置）：[block_start, block_end) 各向左移一位（dream logit 右移补偿）
+        block_compute_start = max(int(block_start) - 1, 0)
+        block_compute_end = int(block_end) - 1
+        if block_compute_end <= block_compute_start:
+            raise RuntimeError(
+                f"Invalid block compute range [{block_compute_start}, {block_compute_end}) for focus_decode."
+            )
+
+        # prev_score: [B, nh, Lq, Lk] -> 取 batch 0、所有 head、当前 query row、当前 block 的 K 计算区间
+        block_score = prev_score[0, :, q_row, block_compute_start:block_compute_end]
+        # 沿 head 维度 reduce
+        block_score_reduced = block_score.float().sum(dim=0)
+
+        # 把 mask candidate 转换成相对 block 计算区间的索引，再选 topk
+        relative_candidates = query_candidate_indices - block_compute_start
+        candidate_scores = block_score_reduced[relative_candidates]
+        top_indices = torch.topk(candidate_scores, k=k).indices
         return query_candidate_indices[top_indices]
 
     @staticmethod
