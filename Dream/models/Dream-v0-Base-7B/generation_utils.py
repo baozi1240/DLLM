@@ -928,24 +928,23 @@ class DreamGenerationMixin:
                         break
 
                     masked_indices = torch.where(block_mask_index[0])[0] + current_block_start
-                    sample_indices = self._select_focus_indices(
+                    sample_query_indices = self._select_focus_query_indices(
                         prev_score_sums=prev_focus_scores,
                         prev_compute_indices=prev_focus_compute_indices,
                         last_sampled_index=last_sampled_index,
                         masked_indices=masked_indices,
                         focus_topk=int(focus_topk),
                     )
-                    if sample_indices.numel() == 0:
-                        raise RuntimeError("focus_decode found no sample indices.")
+                    if sample_query_indices.numel() == 0:
+                        raise RuntimeError("focus_decode found no sample query indices.")
 
                     update_indices = torch.tensor(
                         list(focus_update_token_indices),
                         device=x.device,
                         dtype=torch.long,
                     )
-                    sample_indices = torch.sort(sample_indices).values
-                    # Sampling still consumes the previous query row, but KV refresh now targets the unmasked token itself.
-                    sample_query_indices = torch.sort(sample_indices - 1).values
+                    sample_query_indices = torch.sort(sample_query_indices).values
+                    sample_indices = sample_query_indices + 1
                     compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
                     compute_indices = torch.unique(torch.sort(compute_indices).values)
                     sample_mask = torch.isin(compute_indices, sample_query_indices)
@@ -1059,7 +1058,7 @@ class DreamGenerationMixin:
             raise RuntimeError(f"Invalid token index {token_index} for shifted logits decoding.")
         return query_index
 
-    def _select_focus_indices(
+    def _select_focus_query_indices(
         self,
         prev_score_sums,
         prev_compute_indices,
@@ -1067,14 +1066,19 @@ class DreamGenerationMixin:
         masked_indices: torch.LongTensor,
         focus_topk: int,
     ) -> torch.LongTensor:
-        k = min(int(focus_topk), masked_indices.numel())
+        query_candidate_indices = masked_indices - 1
+        query_candidate_indices = query_candidate_indices[query_candidate_indices >= 0]
+        if query_candidate_indices.numel() == 0:
+            return query_candidate_indices
+
+        k = min(int(focus_topk), query_candidate_indices.numel())
         last_sample_query_index = self._token_index_to_query_index(last_sampled_index)
         query_match = (prev_compute_indices[0] == int(last_sample_query_index)).nonzero(as_tuple=True)[0]
         if query_match.numel() == 0:
             raise RuntimeError("Unable to align the last sampled index with captured focus attention rows.")
-        attention_scores = prev_score_sums[0, query_match[0], masked_indices]
+        attention_scores = prev_score_sums[0, query_match[0], query_candidate_indices]
         top_indices = torch.topk(attention_scores, k=k).indices
-        return masked_indices[top_indices]
+        return query_candidate_indices[top_indices]
 
     @staticmethod
     def _sample_focus_logits(candidate_logits, alg, temperature, top_p, top_k):
