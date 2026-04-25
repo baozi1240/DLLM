@@ -1,21 +1,30 @@
 import argparse
 import json
+import os
 import re
 import time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import torch
-from datasets import load_dataset
+from datasets import DownloadConfig, load_dataset, load_from_disk
 from transformers import AutoModel, AutoTokenizer
 
-HF_DATASETS_OFFLINE=1
-HF_HUB_OFFLINE=1
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+DEFAULT_GSM8K_DATASET_PATH = "/home/xuefeng/.cache/opencompass/data/gsm8k"
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="./models/Dream-v0-Base-7B")
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DEFAULT_GSM8K_DATASET_PATH,
+        help="Optional local GSM8K dataset path. Supports load_from_disk directories or json/jsonl files.",
+    )
     parser.add_argument("--split", type=str, default="test")
     parser.add_argument("--n_shot", type=int, default=0)
     parser.add_argument("--start", type=int, default=0)
@@ -37,6 +46,57 @@ def parse_args():
     parser.add_argument("--output_path", type=str, default="gsm8k_results.jsonl")
     parser.add_argument("--stats_path", type=str, default="gsm8k_stats.json")
     return parser.parse_args()
+
+
+def resolve_mode_name(args):
+    if args.focus_decode:
+        return "focus_dual_cache"
+    if args.dual_cache:
+        return "fast_dllm_dual_cache"
+    if args.use_cache:
+        return "fast_dllm_prefix_cache"
+    return "baseline"
+
+
+def load_gsm8k_split(args, split_name):
+    if args.dataset_path:
+        dataset_path = Path(args.dataset_path).expanduser().resolve()
+        if not dataset_path.exists():
+            raise FileNotFoundError(f"Local dataset path not found: {dataset_path}")
+
+        if dataset_path.is_dir():
+            split_jsonl = dataset_path / f"{split_name}.jsonl"
+            split_json = dataset_path / f"{split_name}.json"
+            if split_jsonl.exists() or split_json.exists():
+                split_file = split_jsonl if split_jsonl.exists() else split_json
+                return load_dataset(
+                    "json",
+                    data_files={split_name: str(split_file)},
+                    split=split_name,
+                )
+
+            dataset_obj = load_from_disk(str(dataset_path))
+            if hasattr(dataset_obj, "keys"):
+                if split_name not in dataset_obj:
+                    raise ValueError(
+                        f"Split '{split_name}' not found in local dataset directory: {dataset_path}"
+                    )
+                return dataset_obj[split_name]
+            return dataset_obj
+
+        suffixes = "".join(dataset_path.suffixes).lower()
+        if suffixes.endswith(".jsonl") or suffixes.endswith(".json"):
+            return load_dataset(
+                "json",
+                data_files={split_name: str(dataset_path)},
+                split=split_name,
+            )
+        raise ValueError(
+            "Unsupported --dataset_path format. Use a load_from_disk directory or a .json/.jsonl file."
+        )
+
+    download_config = DownloadConfig(local_files_only=True)
+    return load_dataset("gsm8k", "main", split=split_name, download_config=download_config)
 
 
 def select_device():
@@ -148,6 +208,57 @@ def generate_batch(model, tokenizer, batch_questions, few_shot_prefix, device, a
     return responses
 
 
+def save_json(path: Path, payload):
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def build_stats(
+    *,
+    args,
+    dataset_path,
+    device,
+    few_shot_examples,
+    start,
+    total,
+    correct,
+    total_generation_time,
+    wall_time,
+    output_path,
+):
+    effective_use_cache = bool(args.use_cache or args.dual_cache)
+    mode_name = resolve_mode_name(args)
+    return {
+        "dataset_path": str(dataset_path) if dataset_path is not None else None,
+        "mode": mode_name,
+        "model_path": args.model_path,
+        "device": device,
+        "split": args.split,
+        "n_shot": len(few_shot_examples),
+        "max_new_tokens": args.max_new_tokens,
+        "steps": args.steps,
+        "block_length": args.block_length,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "alg": args.alg,
+        "alg_temp": args.alg_temp,
+        "use_cache": effective_use_cache,
+        "dual_cache": bool(args.dual_cache),
+        "focus_decode": bool(args.focus_decode),
+        "focus_layer": int(args.focus_layer) if args.focus_decode else 0,
+        "focus_topk": int(args.focus_topk) if args.focus_decode else 0,
+        "start": start,
+        "end": start + total,
+        "total": total,
+        "correct": correct,
+        "accuracy": correct / total if total else 0.0,
+        "total_generation_time_sec": total_generation_time,
+        "avg_generation_time_sec": total_generation_time / total if total else 0.0,
+        "wall_time_s": wall_time,
+        "output_path": str(output_path),
+    }
+
+
 def main():
     args = parse_args()
     if args.focus_decode:
@@ -190,10 +301,11 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
     model = model.to(device).eval()
 
-    dataset = load_dataset("gsm8k", "main", split=args.split)
+    dataset_source = Path(args.dataset_path).expanduser().resolve() if args.dataset_path else None
+    dataset = load_gsm8k_split(args, args.split)
     few_shot_examples = []
     if args.n_shot > 0:
-        few_shot_dataset = load_dataset("gsm8k", "main", split="train")
+        few_shot_dataset = load_gsm8k_split(args, "train")
         shot_count = min(args.n_shot, len(few_shot_dataset))
         few_shot_examples = [
             few_shot_dataset[i]
@@ -217,11 +329,13 @@ def main():
         output_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_path.parent != Path("."):
         stats_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("", encoding="utf-8")
 
     total = 0
     correct = 0
     total_generation_time = 0.0
     total_batches = (len(dataset) + args.batch_size - 1) // args.batch_size
+    wall_start = time.perf_counter()
 
     with output_path.open("w", encoding="utf-8") as fout:
         for batch_start in range(0, len(dataset), args.batch_size):
@@ -263,36 +377,49 @@ def main():
                     "correct": is_correct,
                 }
                 fout.write(json.dumps(record, ensure_ascii=False) + "\n")
+                fout.flush()
+
+                running_stats = build_stats(
+                    args=args,
+                    dataset_path=dataset_source,
+                    device=device,
+                    few_shot_examples=few_shot_examples,
+                    start=start,
+                    total=total,
+                    correct=correct,
+                    total_generation_time=total_generation_time,
+                    wall_time=time.perf_counter() - wall_start,
+                    output_path=output_path,
+                )
+                save_json(stats_path, running_stats)
 
                 print("=" * 80, flush=True)
-                print(f"[{total}] correct={is_correct} acc={correct / total:.4f}", flush=True)
+                print(
+                    f"[{total}/{len(dataset)}] correct={is_correct} "
+                    f"acc={correct / total:.4f} "
+                    f"batch_gen={batch_elapsed / len(predictions):.4f}s "
+                    f"running_avg_gen={total_generation_time / total:.4f}s",
+                    flush=True,
+                )
                 print("question:", question, flush=True)
                 print("gold:", gold, flush=True)
                 print("pred:", pred, flush=True)
                 print("response:", prediction, flush=True)
 
-    stats = {
-        "model_path": args.model_path,
-        "split": args.split,
-        "n_shot": len(few_shot_examples),
-        "block_length": args.block_length,
-        "use_cache": bool(args.use_cache or args.dual_cache),
-        "dual_cache": bool(args.dual_cache),
-        "focus_decode": bool(args.focus_decode),
-        "focus_layer": int(args.focus_layer),
-        "focus_topk": int(args.focus_topk),
-        "start": start,
-        "end": start + total,
-        "total": total,
-        "correct": correct,
-        "accuracy": correct / total if total else 0.0,
-        "total_generation_time_sec": total_generation_time,
-        "avg_generation_time_sec": total_generation_time / total if total else 0.0,
-        "output_path": str(output_path),
-    }
-
-    with stats_path.open("w", encoding="utf-8") as f:
-        json.dump(stats, f, ensure_ascii=False, indent=2)
+    wall_time = time.perf_counter() - wall_start
+    stats = build_stats(
+        args=args,
+        dataset_path=dataset_source,
+        device=device,
+        few_shot_examples=few_shot_examples,
+        start=start,
+        total=total,
+        correct=correct,
+        total_generation_time=total_generation_time,
+        wall_time=wall_time,
+        output_path=output_path,
+    )
+    save_json(stats_path, stats)
 
     print("=" * 80, flush=True)
     print(json.dumps(stats, ensure_ascii=False, indent=2), flush=True)
