@@ -4,7 +4,8 @@ set -euo pipefail
 PYTHON_BIN=python
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/eval_humaneval.py"
-MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B"
+MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Parallel"
+FASTDLLM_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm"
 #MODEL_PATH="${SCRIPT_DIR}/models/test" # debug
 DATASET_PATH="data/HumanEval.jsonl.gz"
 OUTPUT_ROOT="${SCRIPT_DIR}/humaneval_sweeps/$(date +%Y%m%d_%H%M%S)"
@@ -27,6 +28,7 @@ run_case() {
   local gen_length="$2"
   local steps="$3"
   local block_length="$4"
+  local model_path="$5"
 
   local run_name="mode${mode_name}_len${gen_length}_steps${steps}_blk${block_length}"
   if [[ "${mode_name}" == "focus_dual_cache" ]]; then
@@ -44,9 +46,9 @@ run_case() {
     mode_args=(--use_cache --dual_cache --focus_decode --focus_layer "${FOCUS_LAYER}" --focus_topk "${FOCUS_TOPK}")
   fi
 
-  echo "Running ${run_name}"
+  echo "Running ${run_name} with model ${model_path}"
   "${PYTHON_BIN}" -u "${PYTHON_SCRIPT}" \
-    --model_path "${MODEL_PATH}" \
+    --model_path "${model_path}" \
     --dataset_path "${DATASET_PATH}" \
     --max_new_tokens "${gen_length}" \
     --steps "${steps}" \
@@ -64,7 +66,11 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
   steps="${gen_length}"
   for block_length in "${BLOCK_LENGTHS[@]}"; do
     for mode_name in "${MODES[@]}"; do
-      run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}"
+      model_path="${MODEL_PATH}"
+      if [[ "${mode_name}" == "fast_dllm_dual_cache" ]]; then
+        model_path="${FASTDLLM_MODEL_PATH}"
+      fi
+      run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}" "${model_path}"
     done
   done
 done

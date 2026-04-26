@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 import time
 from collections import defaultdict
 import torch
@@ -33,10 +34,28 @@ def parse_args():
         help="覆盖逐步明细 jsonl 文件名（置于 --profile_dir 下，除非为绝对路径）",
     )
     parser.add_argument("--profile_top_shapes", type=int, default=10)
+    parser.add_argument(
+        "--trace_decode",
+        action="store_true",
+        help="将生成结果和每个 diffusion history step 新解码 token 数量写入 trace/*.json。",
+    )
     parser.add_argument("--focus_decode", action="store_true")
     parser.add_argument("--focus_layer", type=int, default=3)
     parser.add_argument("--focus_topk", type=int, default=8)
     parser.add_argument("--max_new_tokens", type=int, default=512)
+    parser.add_argument(
+        "--alg",
+        type=str,
+        default="entropy",
+        choices=["origin", "entropy", "maskgit_plus", "topk_margin", "confidence_threshold"],
+        help="diffusion 解码采样算法；confidence_threshold 启用阈值策略，每步可解锁多个位置",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.9,
+        help="alg=confidence_threshold 时使用的置信度阈值",
+    )
     parser.add_argument(
         "--steps",
         type=int,
@@ -408,6 +427,42 @@ def resolve_profile_output_paths(args):
     return detail, summary
 
 
+def _safe_filename_part(value):
+    text = str(value)
+    return "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in text)
+
+
+def build_trace_stem(args, model_path):
+    """由 demo_completion.py 中影响解码的参数生成可识别 trace 文件名。"""
+    steps = args.steps if args.steps is not None else args.max_new_tokens
+    block_length = args.block_length if args.block_length is not None else "none"
+    model_name = os.path.basename(os.path.normpath(model_path))
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    parts = [
+        "demo_completion",
+        f"model-{model_name}",
+        f"alg-{args.alg}",
+        f"thr-{args.threshold:g}",
+        f"blk-{block_length}",
+        f"uc-{int(args.use_cache)}",
+        f"euc-{int(args.use_cache or args.dual_cache)}",
+        f"dc-{int(args.dual_cache)}",
+        f"fd-{int(args.focus_decode)}",
+        f"fl-{args.focus_layer}",
+        f"ftk-{args.focus_topk}",
+        f"max-{args.max_new_tokens}",
+        f"steps-{steps}",
+        timestamp,
+    ]
+    return "_".join(_safe_filename_part(part) for part in parts)
+
+
+def resolve_trace_output_path(args, model_path):
+    trace_dir = "trace"
+    os.makedirs(trace_dir, exist_ok=True)
+    return os.path.join(trace_dir, f"{build_trace_stem(args, model_path)}.json")
+
+
 def build_profile_config_dict(args, device, dtype, model_path, steps_used):
     return {
         "model_path": model_path,
@@ -423,9 +478,33 @@ def build_profile_config_dict(args, device, dtype, model_path, steps_used):
         "steps": steps_used,
         "temperature": 0.0,
         "top_p": 0.95,
-        "alg": "entropy",
+        "alg": args.alg,
         "alg_temp": 0.0,
+        "threshold": args.threshold,
         "profile_top_shapes": args.profile_top_shapes,
+    }
+
+
+def build_trace_config_dict(args, device, dtype, model_path, steps_used):
+    return {
+        "script": "demo_completion.py",
+        "model_path": model_path,
+        "device": device,
+        "dtype": str(dtype).replace("torch.", ""),
+        "block_length": args.block_length,
+        "use_cache": args.use_cache,
+        "effective_use_cache": bool(args.use_cache or args.dual_cache),
+        "dual_cache": args.dual_cache,
+        "focus_decode": args.focus_decode,
+        "focus_layer": args.focus_layer,
+        "focus_topk": args.focus_topk,
+        "max_new_tokens": args.max_new_tokens,
+        "steps": steps_used,
+        "temperature": 0.0,
+        "top_p": 0.95,
+        "alg": args.alg,
+        "alg_temp": 0.0,
+        "threshold": args.threshold,
     }
 
 
@@ -483,7 +562,7 @@ def build_profile_summary_dict(step_records, wall_time_s, config):
     }
 
 
-def write_operator_profile_per_step_jsonl(step_records, top_shapes, output_path):
+def write_operator_profile_per_step_jsonl(step_records, top_shapes, output_path, log_stream=None):
     """逐步明细：每行一步，含 GROUP_ORDER 中全部算子类型。"""
     with open(output_path, "w", encoding="utf-8") as f:
         for step_record in step_records:
@@ -492,7 +571,10 @@ def write_operator_profile_per_step_jsonl(step_records, top_shapes, output_path)
             )
             f.write(line + "\n")
     if not step_records:
-        print("Operator profile: warning — no step records collected (empty per-step jsonl).")
+        print(
+            "Operator profile: warning — no step records collected (empty per-step jsonl).",
+            file=log_stream or sys.stdout,
+        )
 
 
 def write_operator_profile_summary_json(summary_dict, output_path):
@@ -502,17 +584,148 @@ def write_operator_profile_summary_json(summary_dict, output_path):
 
 
 def save_operator_profiles(
-    step_records, top_shapes, detail_path, summary_path, wall_time_s, config
+    step_records, top_shapes, detail_path, summary_path, wall_time_s, config, log_stream=None
 ):
     """写入 profiling/ 下两个文件：逐步明细 jsonl + 总览 json。"""
-    write_operator_profile_per_step_jsonl(step_records, top_shapes, detail_path)
+    write_operator_profile_per_step_jsonl(step_records, top_shapes, detail_path, log_stream)
     summary = build_profile_summary_dict(step_records, wall_time_s, config)
     write_operator_profile_summary_json(summary, summary_path)
-    print(f"Operator profile (per-step) saved to: {detail_path}")
-    print(f"Operator profile (summary) saved to: {summary_path}")
+    print(f"Operator profile (per-step) saved to: {detail_path}", file=log_stream or sys.stdout)
+    print(f"Operator profile (summary) saved to: {summary_path}", file=log_stream or sys.stdout)
+
+
+def resolve_mask_token_id(model, tokenizer):
+    candidates = [
+        getattr(getattr(model, "generation_config", None), "mask_token_id", None),
+        getattr(getattr(model, "config", None), "mask_token_id", None),
+        getattr(tokenizer, "mask_token_id", None),
+    ]
+    for candidate in candidates:
+        if candidate is not None:
+            return int(candidate)
+    raise ValueError("Unable to resolve mask_token_id for decode tracing.")
+
+
+def _to_cpu_2d_tokens(tokens):
+    tokens = tokens.detach().to("cpu")
+    if tokens.dim() == 1:
+        tokens = tokens.unsqueeze(0)
+    return tokens
+
+
+def build_decode_trace_records(history, input_ids, sequences, mask_token_id, block_length):
+    if history is None:
+        history = []
+    elif torch.is_tensor(history):
+        history = [history]
+    else:
+        history = list(history)
+
+    input_ids_cpu = _to_cpu_2d_tokens(input_ids)
+    sequences_cpu = _to_cpu_2d_tokens(sequences)
+    input_len = input_ids_cpu.shape[1]
+    generated_length = sequences_cpu.shape[1] - input_len
+    if generated_length < 0:
+        raise ValueError("sequences is shorter than input_ids; cannot trace generated span.")
+    effective_block_length = int(block_length) if block_length else int(generated_length)
+
+    if not history:
+        return [], {
+            "num_history_steps": 0,
+            "batch_size": int(sequences_cpu.shape[0]),
+            "generated_length": int(generated_length),
+            "block_length": int(effective_block_length),
+            "total_new_tokens": 0,
+            "final_remaining_masks": [
+                int(((sequences_cpu[b, input_len:] == mask_token_id).sum()).item())
+                for b in range(sequences_cpu.shape[0])
+            ],
+        }
+
+    prev_generated = torch.full(
+        (sequences_cpu.shape[0], generated_length),
+        int(mask_token_id),
+        dtype=sequences_cpu.dtype,
+    )
+
+    records = []
+    for step_idx, state in enumerate(history):
+        state_cpu = _to_cpu_2d_tokens(state)
+        current_generated = state_cpu[:, input_len : input_len + generated_length]
+        if current_generated.shape != prev_generated.shape:
+            raise ValueError(
+                "history state shape does not match final sequence shape: "
+                f"history generated span={tuple(current_generated.shape)}, "
+                f"expected={tuple(prev_generated.shape)}"
+            )
+
+        prev_mask = prev_generated == mask_token_id
+        current_mask = current_generated == mask_token_id
+        newly_decoded = prev_mask & ~current_mask
+        changed_after_decode = (~prev_mask) & ~current_mask & (prev_generated != current_generated)
+
+        for batch_idx in range(current_generated.shape[0]):
+            positions = newly_decoded[batch_idx].nonzero(as_tuple=True)[0].tolist()
+            changed_positions = changed_after_decode[batch_idx].nonzero(as_tuple=True)[0].tolist()
+            if effective_block_length > 0:
+                blocks = sorted({int(pos // effective_block_length) for pos in positions})
+                block_start_tokens = sum(1 for pos in positions if pos % effective_block_length == 0)
+            else:
+                blocks = []
+                block_start_tokens = 0
+
+            records.append(
+                {
+                    "step": int(step_idx),
+                    "batch": int(batch_idx),
+                    "new_tokens": int(len(positions)),
+                    "cumulative_tokens": int((~current_mask[batch_idx]).sum().item()),
+                    "remaining_masks": int(current_mask[batch_idx].sum().item()),
+                    "blocks": blocks,
+                    "block_start_tokens": int(block_start_tokens),
+                    "positions": [int(pos) for pos in positions],
+                    "changed_after_decode_positions": [
+                        int(pos) for pos in changed_positions
+                    ],
+                }
+            )
+
+        prev_generated = current_generated.clone()
+
+    summary = {
+        "num_history_steps": int(len(history)),
+        "batch_size": int(sequences_cpu.shape[0]),
+        "generated_length": int(generated_length),
+        "block_length": int(effective_block_length),
+        "total_new_tokens": int(sum(record["new_tokens"] for record in records)),
+        "final_remaining_masks": [
+            int(((sequences_cpu[b, input_len:] == mask_token_id).sum()).item())
+            for b in range(sequences_cpu.shape[0])
+        ],
+    }
+    return records, summary
+
+
+def build_decode_trace_json(generation, records, summary, config):
+    return {
+        "schema": "demo_completion_decode_trace_v1",
+        "config": config,
+        "generation": generation,
+        "decode_trace": {
+            "summary": summary,
+            "steps": records,
+        },
+    }
+
+
+def write_decode_trace_json(trace_payload, output_path):
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(trace_payload, f, ensure_ascii=False, indent=2)
+        f.write("\n")
 
 args = parse_args()
 use_cache = args.use_cache or args.dual_cache
+log_stream = sys.stderr if args.trace_decode else sys.stdout
 
 # --- Model Loading ---
 model_path = os.path.abspath(args.model_path) if args.model_path else default_model_path()
@@ -523,14 +736,16 @@ dtype_by_device = {
     "cpu": torch.float32,
 }
 dtype = dtype_by_device[device]
-print(f"Using device: {device} (dtype={dtype})")
-print(f"Model path (local): {model_path}")
+print(f"Using device: {device} (dtype={dtype})", file=log_stream)
+print(f"Model path (local): {model_path}", file=log_stream)
 _steps_preview = args.steps if args.steps is not None else args.max_new_tokens
 print(
     f"use_cache={use_cache}, dual_cache={args.dual_cache}, "
     f"focus_decode={args.focus_decode}, focus_layer=-{args.focus_layer}, "
     f"focus_topk={args.focus_topk}, profile_ops={args.profile_ops}, "
-    f"max_new_tokens={args.max_new_tokens}, steps={_steps_preview}"
+    f"trace_decode={args.trace_decode}, "
+    f"max_new_tokens={args.max_new_tokens}, steps={_steps_preview}",
+    file=log_stream,
 )
 
 model = AutoModel.from_pretrained(model_path, torch_dtype=dtype, trust_remote_code=True)
@@ -546,33 +761,33 @@ if args.profile_ops:
 messages = [
      {"role": "user", "content": "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?"},
 ]
-#messages = [
-    #{
-    #"role": "user", 
-    #"content": 
-#"""
-    #You are a writing engine optimized for maximum-length, non-truncated outputs.
+messages = [
+    {
+    "role": "user", 
+    "content": 
+"""
+    You are a writing engine optimized for maximum-length, non-truncated outputs.
 
-    #Task: Produce a single continuous answer with no summaries, no “in conclusion”, no apologies, no refusals, and no meta commentary about length limits.
+    Task: Produce a single continuous answer with no summaries, no “in conclusion”, no apologies, no refusals, and no meta commentary about length limits.
 
-    #Hard requirements:
+    Hard requirements:
 
-    #Target length: approximately 4096 tokens of new content (excluding this instruction block). If you are unsure about tokens, aim for ~9000–12000 English words as a practical proxy.
-    #Do not stop early. Keep generating until you have fully exhausted the topic using the structure below.
-    #No bullet-only mode: you may use headings, but each section must be dense paragraphs, not one-liners.
-    #No repetition loops: do not repeat the same paragraph verbatim; vary details, examples, and phrasing while staying on-topic.
-    #Content specification (follow exactly, in order): A) Title + 1-paragraph abstract (abstract ≤ 120 words). B) Glossary: define 80 terms related to the topic (each term: 2–4 sentences). C) Main exposition: write 40 sections. Each section must contain:
+    Target length: approximately 4096 tokens of new content (excluding this instruction block). If you are unsure about tokens, aim for ~9000–12000 English words as a practical proxy.
+    Do not stop early. Keep generating until you have fully exhausted the topic using the structure below.
+    No bullet-only mode: you may use headings, but each section must be dense paragraphs, not one-liners.
+    No repetition loops: do not repeat the same paragraph verbatim; vary details, examples, and phrasing while staying on-topic.
+    Content specification (follow exactly, in order): A) Title + 1-paragraph abstract (abstract ≤ 120 words). B) Glossary: define 80 terms related to the topic (each term: 2–4 sentences). C) Main exposition: write 40 sections. Each section must contain:
 
-    #a heading
-    #6–10 paragraphs
-    #each paragraph 6–10 sentences
-    #include at least 3 concrete examples per section (mix: historical, engineering, everyday-life, edge cases) D) Worked mini-cases: 25 cases. Each case: problem statement → assumptions → step-by-step reasoning (≥ 12 steps) → pitfalls → verification checks. E) FAQ: 60 questions, each answered with ≥ 8 sentences. F) Appendix: 50 “notes” (each note: ≥ 6 sentences) covering corner cases, failure modes, and counterarguments.
-    #Topic (choose one and stay consistent; do not switch topics): “How large language models fail silently in real-world software workflows, and how teams can detect, measure, and mitigate those failures without over-relying on automation.”
+    a heading
+    6–10 paragraphs
+    each paragraph 6–10 sentences
+    include at least 3 concrete examples per section (mix: historical, engineering, everyday-life, edge cases) D) Worked mini-cases: 25 cases. Each case: problem statement → assumptions → step-by-step reasoning (≥ 12 steps) → pitfalls → verification checks. E) FAQ: 60 questions, each answered with ≥ 8 sentences. F) Appendix: 50 “notes” (each note: ≥ 6 sentences) covering corner cases, failure modes, and counterarguments.
+    Topic (choose one and stay consistent; do not switch topics): “How large language models fail silently in real-world software workflows, and how teams can detect, measure, and mitigate those failures without over-relying on automation.”
 
-    #Begin now. Output only the requested long-form content.
-#"""
-    #}
-#]
+    Begin now. Output only the requested long-form content.
+"""
+    }
+]
 inputs = tokenizer.apply_chat_template(
     messages, return_tensors="pt", return_dict=True, add_generation_prompt=True
 )
@@ -597,8 +812,9 @@ try:
         block_length=args.block_length,
         use_cache=use_cache,
         dual_cache=args.dual_cache,
-        alg="entropy",
+        alg=args.alg,
         alg_temp=0.,
+        threshold=args.threshold,
         focus_decode=args.focus_decode,
         focus_layer=args.focus_layer,
         focus_topk=args.focus_topk,
@@ -615,10 +831,31 @@ generations = [
     tokenizer.decode(g[len(p) :].tolist())
     for p, g in zip(input_ids, output.sequences)
 ]
+generation_text = generations[0].split(tokenizer.eos_token)[0]
 
-print(generations[0].split(tokenizer.eos_token)[0])
+if args.trace_decode:
+    _mask_token_id = resolve_mask_token_id(model, tokenizer)
+    _trace_records, _trace_summary = build_decode_trace_records(
+        getattr(output, "history", None),
+        input_ids,
+        output.sequences,
+        _mask_token_id,
+        args.block_length,
+    )
+    _steps_used = args.steps if args.steps is not None else args.max_new_tokens
+    _trace_path = resolve_trace_output_path(args, model_path)
+    _trace_payload = build_decode_trace_json(
+        generation_text,
+        _trace_records,
+        _trace_summary,
+        build_trace_config_dict(args, device, dtype, model_path, _steps_used),
+    )
+    write_decode_trace_json(_trace_payload, _trace_path)
+    print(f"Decode trace saved to: {_trace_path}", file=log_stream)
+else:
+    print(generation_text)
 if args.show_time:
-    print(f"Inference time: {elapsed_time:.4f}s")
+    print(f"Inference time: {elapsed_time:.4f}s", file=log_stream)
 if args.profile_ops and profile_stats is not None:
     _detail_path, _summary_path = resolve_profile_output_paths(args)
     _steps_used = args.steps if args.steps is not None else args.max_new_tokens
@@ -632,4 +869,5 @@ if args.profile_ops and profile_stats is not None:
         _summary_path,
         elapsed_time,
         _prof_config,
+        log_stream,
     )
