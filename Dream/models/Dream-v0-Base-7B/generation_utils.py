@@ -479,6 +479,7 @@ class DreamGenerationMixin:
         focus_decode = kwargs.get("focus_decode", False)
         focus_layer = kwargs.get("focus_layer", None)
         focus_topk = kwargs.get("focus_topk", None)
+        threshold = kwargs.get("threshold", None)
 
         result = self._sample(
             input_ids,
@@ -490,6 +491,7 @@ class DreamGenerationMixin:
             focus_decode=focus_decode,
             focus_layer=focus_layer,
             focus_topk=focus_topk,
+            threshold=threshold,
         )
         return result
 
@@ -504,6 +506,7 @@ class DreamGenerationMixin:
         focus_decode: bool,
         focus_layer: Optional[int],
         focus_topk: Optional[int],
+        threshold: Optional[float],
     ) -> Union[DreamModelOutput, torch.LongTensor]:
         ctx = self._build_sample_context(
             input_ids=input_ids,
@@ -524,6 +527,7 @@ class DreamGenerationMixin:
             ctx=ctx,
             use_cache=use_cache,
             dual_cache=dual_cache,
+            threshold=threshold,
         )
 
     def _build_sample_context(
@@ -595,12 +599,31 @@ class DreamGenerationMixin:
             "tok_idx": tok_idx,
         }
 
-    def _sample_non_focus_decode(self, ctx, use_cache: bool, dual_cache: bool):
+    def _sample_non_focus_decode(
+        self,
+        ctx,
+        use_cache: bool,
+        dual_cache: bool,
+        threshold: Optional[float],
+    ):
         if use_cache:
-            return self._sample_non_focus_decode_with_cache(ctx=ctx, dual_cache=dual_cache)
+            return self._sample_non_focus_decode_with_cache(
+                ctx=ctx,
+                dual_cache=dual_cache,
+                threshold=threshold,
+            )
+        if ctx["alg"] == "confidence_threshold":
+            raise ValueError(
+                "alg='confidence_threshold' currently requires use_cache=True."
+            )
         return self._sample_non_focus_decode_without_cache(ctx=ctx)
 
-    def _sample_non_focus_decode_with_cache(self, ctx, dual_cache: bool):
+    def _sample_non_focus_decode_with_cache(
+        self,
+        ctx,
+        dual_cache: bool,
+        threshold: Optional[float],
+    ):
         x = ctx["x"]
         histories = ctx["histories"]
         mask_token_id = ctx["mask_token_id"]
@@ -616,6 +639,14 @@ class DreamGenerationMixin:
         attention_mask = ctx["attention_mask"]
         tok_idx = ctx["tok_idx"]
         input_ids = ctx["input_ids"]
+
+        use_threshold = alg == "confidence_threshold"
+        if use_threshold:
+            if threshold is None:
+                raise ValueError(
+                    "alg='confidence_threshold' requires a non-None `threshold`."
+                )
+            threshold_value = float(threshold)
 
         past_key_values = None
 
@@ -636,11 +667,13 @@ class DreamGenerationMixin:
                 replace_position = torch.zeros_like(x, dtype=torch.bool)
                 replace_position[:, current_block_start:current_block_end] = True
 
-            for i in range(1, inner_steps):
-                t = timesteps[i]
-                s = timesteps[i + 1]
+            i = 1
+            while True:
                 block_mask_index = (x[:, current_block_start:current_block_end] == mask_token_id)
                 if not block_mask_index.any():
+                    break
+                # 非阈值模式仍然受限于 inner_steps 调度；阈值模式则按需迭代直到 block 填满
+                if not use_threshold and i >= inner_steps:
                     break
 
                 if dual_cache:
@@ -678,12 +711,37 @@ class DreamGenerationMixin:
                         past_key_values=past_key_values,
                         use_cache=True,
                     )
-                past_key_values = model_output.past_key_values
+                # dual_cache 在 attention forward 中以 in-place 方式写回 past 的
+                # replace_position 槽位，past 张量长度恒定；此处刷新只是把同一个
+                # 对象再绑定一次。而 dual_cache=False 时 past 是 warmup 后 trim 到
+                # current_block_start 的“纯 prompt+已 commit block” raw KV，
+                # 内层每次 forward 输入都是 x[:, current_block_start:]，不能把
+                # cat 后的 (past+new) 整体写回 past，否则 past 会不断把未 commit
+                # 的 mask 区累积进来,导致下次 forward 中同一段 token 反复 cat、
+                # position_ids 错位、attention 分布崩坏（confidence_threshold 下
+                # 会退化成重复输出）。
+                if dual_cache:
+                    past_key_values = model_output.past_key_values
 
                 logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
                 block_logits = logits[:, :block_length]
 
-                if alg == "origin":
+                if use_threshold:
+                    self._apply_confidence_threshold_update(
+                        x=x,
+                        block_logits=block_logits,
+                        block_mask_index=block_mask_index,
+                        current_block_start=current_block_start,
+                        current_block_end=current_block_end,
+                        mask_token_id=mask_token_id,
+                        threshold=threshold_value,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                    )
+                elif alg == "origin":
+                    t = timesteps[i]
+                    s = timesteps[i + 1]
                     block_slice = x[:, current_block_start:current_block_end].clone()
                     local_mask_index = (block_slice == mask_token_id)
                     x0 = torch.zeros_like(
@@ -702,7 +760,10 @@ class DreamGenerationMixin:
                         )
                     block_slice[local_mask_index] = x0.clone()
                     x[:, current_block_start:current_block_end] = block_slice
+                    i += 1
                 else:
+                    t = timesteps[i]
+                    s = timesteps[i + 1]
                     mask_logits = block_logits[block_mask_index]
                     confidence, x0 = self._sample_non_focus_mask_logits(
                         mask_logits=mask_logits,
@@ -744,6 +805,7 @@ class DreamGenerationMixin:
                         x[:, current_block_start:current_block_end][row_indices, transfer_index] = (
                             x_candidate[row_indices, transfer_index]
                         )
+                    i += 1
 
                 if histories is not None:
                     histories.append(x.clone())
@@ -1175,6 +1237,55 @@ class DreamGenerationMixin:
         sampled_confidence = full_confidence / alg_temp
         sampled_confidence = F.softmax(sampled_confidence, dim=-1)
         return torch.multinomial(sampled_confidence, num_samples=number_transfer_tokens)
+
+    def _apply_confidence_threshold_update(
+        self,
+        x,
+        block_logits,
+        block_mask_index,
+        current_block_start: int,
+        current_block_end: int,
+        mask_token_id,
+        threshold: float,
+        temperature,
+        top_p,
+        top_k,
+    ):
+        """对 block 内所有 mask 位置评分，每步选 top-1 + 所有置信度 >= threshold 的位置一起解锁。"""
+        mask_logits = block_logits[block_mask_index]
+        confidence, x0 = sample_tokens(
+            mask_logits,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+        )
+
+        full_confidence = torch.full_like(
+            x[:, current_block_start:current_block_end],
+            -torch.inf,
+            device=self.device,
+            dtype=block_logits.dtype,
+        )
+        full_confidence[block_mask_index] = confidence
+
+        x_candidate = torch.zeros_like(
+            x[:, current_block_start:current_block_end],
+            device=self.device,
+            dtype=torch.long,
+        ) + mask_token_id
+        x_candidate[block_mask_index] = x0.clone()
+
+        # top-1 必选（保证每步至少推进 1 个位置，循环可终止）
+        top1_pos = full_confidence.argmax(dim=1, keepdim=True)
+        top1_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
+        top1_mask.scatter_(1, top1_pos, True)
+
+        # 其余位置仅在置信度 >= threshold 时一起解锁
+        above_threshold_mask = full_confidence >= threshold
+
+        transfer_index = (top1_mask | above_threshold_mask) & block_mask_index
+
+        x[:, current_block_start:current_block_end][transfer_index] = x_candidate[transfer_index]
 
     @staticmethod
     def _format_sample_output(x, histories, return_dict_in_generate: bool):
