@@ -57,6 +57,12 @@ def parse_args():
         help="alg=confidence_threshold 时使用的置信度阈值",
     )
     parser.add_argument(
+        "--gamma",
+        type=float,
+        default=0.1,
+        help="focus_decode + confidence_threshold 时使用的置信度补偿衰减系数",
+    )
+    parser.add_argument(
         "--steps",
         type=int,
         default=None,
@@ -443,6 +449,7 @@ def build_trace_stem(args, model_path):
         f"model-{model_name}",
         f"alg-{args.alg}",
         f"thr-{args.threshold:g}",
+        f"gamma-{args.gamma:g}",
         f"blk-{block_length}",
         f"uc-{int(args.use_cache)}",
         f"euc-{int(args.use_cache or args.dual_cache)}",
@@ -481,6 +488,7 @@ def build_profile_config_dict(args, device, dtype, model_path, steps_used):
         "alg": args.alg,
         "alg_temp": 0.0,
         "threshold": args.threshold,
+        "gamma": args.gamma,
         "profile_top_shapes": args.profile_top_shapes,
     }
 
@@ -505,6 +513,7 @@ def build_trace_config_dict(args, device, dtype, model_path, steps_used):
         "alg": args.alg,
         "alg_temp": 0.0,
         "threshold": args.threshold,
+        "gamma": args.gamma,
     }
 
 
@@ -744,7 +753,8 @@ print(
     f"focus_decode={args.focus_decode}, focus_layer=-{args.focus_layer}, "
     f"focus_topk={args.focus_topk}, profile_ops={args.profile_ops}, "
     f"trace_decode={args.trace_decode}, "
-    f"max_new_tokens={args.max_new_tokens}, steps={_steps_preview}",
+    f"max_new_tokens={args.max_new_tokens}, steps={_steps_preview}, "
+    f"gamma={args.gamma}",
     file=log_stream,
 )
 
@@ -815,6 +825,7 @@ try:
         alg=args.alg,
         alg_temp=0.,
         threshold=args.threshold,
+        gamma=args.gamma,
         focus_decode=args.focus_decode,
         focus_layer=args.focus_layer,
         focus_topk=args.focus_topk,

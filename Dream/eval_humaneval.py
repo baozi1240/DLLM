@@ -154,6 +154,7 @@ def parse_args():
     parser.add_argument("--alg", type=str, default="entropy")
     parser.add_argument("--alg_temp", type=float, default=0.0)
     parser.add_argument("--threshold", type=float, default=0.9)
+    parser.add_argument("--gamma", type=float, default=0.1)
 
     parser.add_argument("--use_cache", action="store_true")
     parser.add_argument("--dual_cache", action="store_true")
@@ -303,6 +304,7 @@ def build_run_tag(args):
         parts.append(f"algtemp{format_float_tag(args.alg_temp)}")
     if args.alg == "confidence_threshold":
         parts.append(f"th{format_float_tag(args.threshold)}")
+        parts.append(f"gamma{format_float_tag(args.gamma)}")
     return "_".join(parts)
 
 
@@ -401,6 +403,7 @@ def generate_completion(model, tokenizer, problem, args, device):
         alg=args.alg,
         alg_temp=args.alg_temp,
         threshold=args.threshold,
+        gamma=args.gamma,
         focus_decode=args.focus_decode,
         focus_layer=args.focus_layer,
         focus_topk=args.focus_topk,
@@ -520,7 +523,8 @@ def build_summary(
             "top_k": args.top_k,
             "alg": args.alg,
             "alg_temp": args.alg_temp,
-            "threshold": args.threshold,
+            "threshold": args.threshold if args.alg == "confidence_threshold" else None,
+            "gamma": args.gamma,
             "use_cache": bool(args.use_cache),
             "dual_cache": bool(args.dual_cache),
             "focus_decode": bool(args.focus_decode),

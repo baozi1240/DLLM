@@ -480,6 +480,7 @@ class DreamGenerationMixin:
         focus_layer = kwargs.get("focus_layer", None)
         focus_topk = kwargs.get("focus_topk", None)
         threshold = kwargs.get("threshold", None)
+        gamma = kwargs.get("gamma", 0.1)
 
         result = self._sample(
             input_ids,
@@ -492,6 +493,7 @@ class DreamGenerationMixin:
             focus_layer=focus_layer,
             focus_topk=focus_topk,
             threshold=threshold,
+            gamma=gamma,
         )
         return result
 
@@ -507,6 +509,7 @@ class DreamGenerationMixin:
         focus_layer: Optional[int],
         focus_topk: Optional[int],
         threshold: Optional[float],
+        gamma: Optional[float],
     ) -> Union[DreamModelOutput, torch.LongTensor]:
         ctx = self._build_sample_context(
             input_ids=input_ids,
@@ -523,6 +526,7 @@ class DreamGenerationMixin:
                 focus_layer=focus_layer,
                 focus_topk=focus_topk,
                 threshold=threshold,
+                gamma=gamma,
             )
         return self._sample_non_focus_decode(
             ctx=ctx,
@@ -923,6 +927,7 @@ class DreamGenerationMixin:
         focus_layer: Optional[int],
         focus_topk: Optional[int],
         threshold: Optional[float],
+        gamma: float,
     ):
         if not use_cache or not dual_cache:
             raise ValueError("focus_decode in generation_utils.py requires use_cache=True and dual_cache=True.")
@@ -955,6 +960,9 @@ class DreamGenerationMixin:
                     "alg='confidence_threshold' requires a non-None `threshold`."
                 )
             threshold_value = float(threshold)
+            gamma_value = float(gamma)
+            if gamma_value < 0:
+                raise ValueError(f"gamma must be non-negative, got {gamma}")
 
         restore_attention, focus_capture = _patch_attention_for_raw_scores(
             _get_focus_decoder_layer(self, int(focus_layer))
@@ -993,6 +1001,17 @@ class DreamGenerationMixin:
                 current_block_start = input_ids.shape[1] + block_id * block_length
                 current_block_end = current_block_start + block_length
                 block_step_start = 1 if block_id == 0 else 0
+                threshold_compensation_token_ids = torch.full(
+                    (block_length,),
+                    -1,
+                    device=x.device,
+                    dtype=torch.long,
+                )
+                threshold_compensation_scores = torch.zeros(
+                    (block_length,),
+                    device=x.device,
+                    dtype=torch.float32,
+                )
 
                 i = block_step_start
                 while True:
@@ -1094,7 +1113,20 @@ class DreamGenerationMixin:
                         top1_pos = full_confidence.argmax(dim=1, keepdim=True)
                         top1_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
                         top1_mask.scatter_(1, top1_pos, True)
-                        above_threshold_mask = full_confidence >= threshold_value
+                        compensation_token_ids = candidate_logits.argmax(dim=-1)
+                        previous_token_ids = threshold_compensation_token_ids[relative_sample_indices]
+                        previous_scores = threshold_compensation_scores[relative_sample_indices]
+                        same_token_mask = previous_token_ids == compensation_token_ids
+                        compensated_scores = torch.where(
+                            same_token_mask,
+                            previous_scores * gamma_value + confidence.to(previous_scores.dtype),
+                            confidence.to(previous_scores.dtype),
+                        )
+                        threshold_confidence = full_confidence.clone()
+                        threshold_confidence[0, relative_sample_indices] = (
+                            compensated_scores.to(confidence.dtype)
+                        )
+                        above_threshold_mask = threshold_confidence >= threshold_value
                         transfer_mask = top1_mask | above_threshold_mask
 
                         x[:, current_block_start:current_block_end][transfer_mask] = (
@@ -1107,6 +1139,15 @@ class DreamGenerationMixin:
                             focus_update_token_indices.append(int(d))
                         # 仅本步 select 出的解码位置（用于下一步 attention 加总）
                         last_selected_indices = [int(d) for d in decoded_global_list]
+
+                        threshold_compensation_token_ids[decoded_relative] = -1
+                        threshold_compensation_scores[decoded_relative] = 0.0
+                        unsampled_mask = ~transfer_mask[0, relative_sample_indices]
+                        unsampled_relative_indices = relative_sample_indices[unsampled_mask]
+                        threshold_compensation_token_ids[unsampled_relative_indices] = (
+                            compensation_token_ids[unsampled_mask]
+                        )
+                        threshold_compensation_scores[unsampled_relative_indices] = compensated_scores[unsampled_mask]
                     else:
                         if alg_temp is None or alg_temp == 0 or alg == "origin":
                             _, transfer_index = torch.topk(full_confidence, 1)
