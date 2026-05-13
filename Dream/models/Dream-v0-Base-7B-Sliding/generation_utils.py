@@ -980,7 +980,7 @@ class DreamGenerationMixin:
         max_length = x.shape[1]
         prompt_length = input_ids.shape[1]
         total_focus_steps = int(ctx["inner_steps"])
-        remaining_mask_count = max_length - prompt_length
+        refresh_stride = max(1, (max_length - prompt_length) // focus_topk)
         steps_since_full_refresh = 0
 
         use_threshold = alg == "confidence_threshold"
@@ -1076,13 +1076,9 @@ class DreamGenerationMixin:
                 )
                 sample_query_indices = torch.sort(sample_query_indices).values
                 sample_indices = sample_query_indices + 1
-                refresh_interval = self._focus_refresh_interval(
-                    remaining_mask_count=remaining_mask_count,
-                    focus_topk=focus_topk,
-                )
                 is_refresh_step = (
                     past_key_values is None
-                    or steps_since_full_refresh >= refresh_interval
+                    or steps_since_full_refresh >= refresh_stride
                 )
                 focus_capture["q_slice_indices"] = sample_query_indices
                 focus_capture["k_slice_indices"] = self._focus_capture_key_indices(
@@ -1094,6 +1090,7 @@ class DreamGenerationMixin:
 
                 if is_refresh_step:
                     # Full-sequence computation: rebuild the whole KV cache directly.
+                    # Refresh stride is fixed to max_new_tokens / focus_topk.
                     # Since every position is recomputed, dual-cache replacement and
                     # replace_position are unnecessary for this path.
                     current_x = x
@@ -1204,8 +1201,6 @@ class DreamGenerationMixin:
                 if selected_indices.numel() == 0:
                     raise RuntimeError("focus_decode selected no positions from the current dynamic window.")
 
-                selected_count = int(selected_indices.numel())
-                remaining_mask_count = max(remaining_mask_count - selected_count, 0)
                 window_mask_indices, next_window_start = self._advance_focus_window(
                     window_mask_indices=window_mask_indices,
                     selected_indices=selected_indices,
@@ -1250,12 +1245,6 @@ class DreamGenerationMixin:
         if mask == "full":
             return mask
         return mask.index_select(2, query_indices)
-
-    @staticmethod
-    def _focus_refresh_interval(remaining_mask_count: int, focus_topk: int) -> int:
-        if remaining_mask_count <= 0:
-            return 1
-        return max(1, (int(remaining_mask_count) + int(focus_topk) - 1) // int(focus_topk))
 
     @staticmethod
     def _advance_focus_window(
