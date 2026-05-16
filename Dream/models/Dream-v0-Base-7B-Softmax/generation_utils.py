@@ -980,7 +980,8 @@ class DreamGenerationMixin:
         max_length = x.shape[1]
         prompt_length = input_ids.shape[1]
         total_focus_steps = int(ctx["inner_steps"])
-        remaining_mask_count = max_length - prompt_length
+        left_mask = max_length - prompt_length
+        initial_left_mask = left_mask
         steps_since_full_refresh = 0
 
         use_threshold = alg == "confidence_threshold"
@@ -1051,9 +1052,16 @@ class DreamGenerationMixin:
                 if not use_threshold and step_id >= total_focus_steps:
                     break
 
-                if prev_focus_score is None:
-                    sample_query_indices = window_mask_indices[: min(focus_topk, window_mask_indices.numel())] - 1
-                    sample_query_indices = sample_query_indices[sample_query_indices >= 0]
+                is_refresh_step = (
+                    past_key_values is None
+                    or steps_since_full_refresh >= self._focus_refresh_interval(
+                        left_mask=left_mask,
+                        block_length=block_length,
+                        initial_left_mask=initial_left_mask,
+                    )
+                )
+                if is_refresh_step:
+                    sample_query_indices = window_mask_indices - 1
                 else:
                     sample_query_indices = self._select_focus_query_indices(
                         prev_score=prev_focus_score,
@@ -1063,37 +1071,21 @@ class DreamGenerationMixin:
                         window_mask_indices=window_mask_indices,
                         focus_topk=focus_topk,
                     )
-                    if sample_query_indices.numel() == 0:
-                        sample_query_indices = window_mask_indices[: min(focus_topk, window_mask_indices.numel())] - 1
-                        sample_query_indices = sample_query_indices[sample_query_indices >= 0]
-                if sample_query_indices.numel() == 0:
-                    raise RuntimeError("focus_decode found no sample query indices.")
 
-                update_indices = torch.tensor(
-                    list(focus_update_token_indices),
-                    device=x.device,
-                    dtype=torch.long,
-                )
                 sample_query_indices = torch.sort(sample_query_indices).values
                 sample_indices = sample_query_indices + 1
-                refresh_interval = self._focus_refresh_interval(
-                    remaining_mask_count=remaining_mask_count,
-                    focus_topk=focus_topk,
-                )
-                is_refresh_step = (
-                    past_key_values is None
-                    or steps_since_full_refresh >= refresh_interval
-                )
                 focus_capture["q_slice_indices"] = sample_query_indices
                 focus_capture["k_slice_indices"] = self._focus_capture_key_indices(
                     window_mask_indices=window_mask_indices,
                     next_window_start=next_window_start,
                     max_length=max_length,
-                    focus_topk=focus_topk,
+                    append_limit=window_mask_indices.numel() if is_refresh_step else focus_topk,
                 )
 
                 if is_refresh_step:
                     # Full-sequence computation: rebuild the whole KV cache directly.
+                    # Refresh interval grows from block_length to 2 * block_length
+                    # decoded steps as the number of remaining masks decreases.
                     # Since every position is recomputed, dual-cache replacement and
                     # replace_position are unnecessary for this path.
                     current_x = x
@@ -1110,6 +1102,11 @@ class DreamGenerationMixin:
                 else:
                     # Top-k sparse computation: refresh only recent decoded tokens and
                     # current top-k sample queries selected from the previous attention slice.
+                    update_indices = torch.tensor(
+                        list(focus_update_token_indices),
+                        device=x.device,
+                        dtype=torch.long,
+                    )
                     compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
                     compute_indices = torch.unique(torch.sort(compute_indices).values)
                     sample_mask = torch.isin(compute_indices, sample_query_indices)
@@ -1204,8 +1201,7 @@ class DreamGenerationMixin:
                 if selected_indices.numel() == 0:
                     raise RuntimeError("focus_decode selected no positions from the current dynamic window.")
 
-                selected_count = int(selected_indices.numel())
-                remaining_mask_count = max(remaining_mask_count - selected_count, 0)
+                left_mask = max(left_mask - int(selected_indices.numel()), 0)
                 window_mask_indices, next_window_start = self._advance_focus_window(
                     window_mask_indices=window_mask_indices,
                     selected_indices=selected_indices,
@@ -1252,10 +1248,15 @@ class DreamGenerationMixin:
         return mask.index_select(2, query_indices)
 
     @staticmethod
-    def _focus_refresh_interval(remaining_mask_count: int, focus_topk: int) -> int:
-        if remaining_mask_count <= 0:
-            return 1
-        return max(1, (int(remaining_mask_count) + int(focus_topk) - 1) // int(focus_topk))
+    def _focus_refresh_interval(left_mask: int, block_length: int, initial_left_mask: int) -> int:
+        if left_mask <= 0:
+            return 2 * block_length
+
+        initial_left_mask = max(int(initial_left_mask), 1)
+        remaining_mask = min(max(int(left_mask), 0), initial_left_mask)
+        decoded_mask = initial_left_mask - remaining_mask
+        extra_interval = (decoded_mask * block_length) // initial_left_mask
+        return block_length + min(block_length, max(0, extra_interval))
 
     @staticmethod
     def _advance_focus_window(
@@ -1287,9 +1288,9 @@ class DreamGenerationMixin:
         window_mask_indices: torch.LongTensor,
         next_window_start: int,
         max_length: int,
-        focus_topk: int,
+        append_limit: int,
     ) -> torch.LongTensor:
-        append_count = min(int(focus_topk), max(int(max_length - next_window_start), 0))
+        append_count = min(int(append_limit), max(int(max_length - next_window_start), 0))
         if append_count <= 0:
             return window_mask_indices
         append_candidates = torch.arange(
@@ -1332,7 +1333,7 @@ class DreamGenerationMixin:
         query_indices = focus_capture.get("score_q_indices")
         if score is None or query_indices is None:
             return
-        selected_query_indices = selected_indices[selected_indices > 0] - 1
+        selected_query_indices = selected_indices - 1
         if selected_query_indices.numel() == 0:
             focus_capture["score"] = score.index_select(
                 2,

@@ -637,9 +637,9 @@ class DreamGenerationMixin:
         temperature = ctx["temperature"]
         top_p = ctx["top_p"]
         top_k = ctx["top_k"]
-        block_length = ctx["block_length"]
-        num_blocks = ctx["num_blocks"]
-        inner_steps = ctx["inner_steps"]
+        block_length = int(ctx["block_length"])
+        num_blocks = int(ctx["num_blocks"])
+        inner_steps = int(ctx["inner_steps"])
         timesteps = ctx["timesteps"]
         attention_mask = ctx["attention_mask"]
         tok_idx = ctx["tok_idx"]
@@ -969,8 +969,17 @@ class DreamGenerationMixin:
         )
 
         focus_replace_position = torch.zeros_like(x, dtype=torch.bool)
-        focus_full_confidence = None
-        focus_x_candidate = None
+        focus_confidence_dtype = self.get_input_embeddings().weight.dtype
+        focus_full_confidence = torch.empty(
+            (x.size(0), block_length),
+            device=self.device,
+            dtype=focus_confidence_dtype,
+        )
+        focus_x_candidate = torch.empty(
+            (x.size(0), block_length),
+            device=self.device,
+            dtype=torch.long,
+        )
         prev_focus_score = None
         prev_focus_compute_indices = None
         past_key_values = None
@@ -981,39 +990,83 @@ class DreamGenerationMixin:
         last_selected_indices: list = []
 
         try:
-            model_output = self(x, attention_mask, tok_idx, use_cache=True)
-            past_key_values = model_output.past_key_values
-            logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
-            _, x0 = sample_tokens(logits, temperature=temperature, top_p=top_p, top_k=top_k)
-
-            first_decode_position = input_ids.shape[1]
-            x[:, first_decode_position] = x0[:, first_decode_position]
-            prev_focus_score = focus_capture.get("score")
-            prev_focus_compute_indices = torch.arange(
-                x.shape[1],
-                device=x.device,
-                dtype=torch.long,
-            ).unsqueeze(0)
-            focus_update_token_indices.append(int(first_decode_position))
-            last_selected_indices = [int(first_decode_position)]
-
             for block_id in range(num_blocks):
                 current_block_start = input_ids.shape[1] + block_id * block_length
                 current_block_end = current_block_start + block_length
-                block_step_start = 1 if block_id == 0 else 0
-                threshold_compensation_token_ids = torch.full(
-                    (block_length,),
-                    -1,
+                threshold_compensation = {}
+
+                if block_id == 0:
+                    first_step_compute_start = 0
+                    first_step_compute_end = x.shape[1]
+                elif block_id == 1:
+                    first_step_compute_start = 0
+                    first_step_compute_end = current_block_end
+                else:
+                    first_step_compute_start = current_block_start - 2 * block_length
+                    first_step_compute_end = current_block_end
+
+                first_step_compute_start = int(first_step_compute_start)
+                first_step_compute_end = int(first_step_compute_end)
+
+                current_x = x[:, first_step_compute_start:first_step_compute_end]
+                if attention_mask != "full":
+                    current_attention_mask = attention_mask[
+                        :, :, first_step_compute_start:first_step_compute_end, :
+                    ]
+                else:
+                    current_attention_mask = attention_mask
+
+                current_compute_indices = torch.arange(
+                    first_step_compute_start,
+                    first_step_compute_end,
                     device=x.device,
                     dtype=torch.long,
-                )
-                threshold_compensation_scores = torch.zeros(
-                    (block_length,),
-                    device=x.device,
-                    dtype=torch.float32,
-                )
+                ).unsqueeze(0)
 
-                i = block_step_start
+                current_position_ids = tok_idx
+
+                if block_id == 0:
+                    model_output = self(
+                        current_x,
+                        current_attention_mask,
+                        current_position_ids,
+                        use_cache=True,
+                    )
+                    past_key_values = model_output.past_key_values
+                else:
+                    focus_replace_position.zero_()
+                    focus_replace_position[:, first_step_compute_start:first_step_compute_end] = True
+
+                    model_output = self(
+                        current_x,
+                        current_attention_mask,
+                        current_position_ids,
+                        past_key_values=past_key_values,
+                        use_cache=True,
+                        dual_cache=True,
+                        replace_position=focus_replace_position,
+                    )
+                    past_key_values = model_output.past_key_values
+                logits = torch.cat([model_output.logits[:, :1], model_output.logits[:, :-1]], dim=1)
+                confidence, sampled_tokens = sample_tokens(logits, temperature=temperature, top_p=top_p, top_k=top_k)
+
+                first_token_row = current_block_start - first_step_compute_start
+                x[0, current_block_start] = sampled_tokens[0, first_token_row]
+                focus_update_token_indices.append(current_block_start)
+                last_selected_indices = [current_block_start]
+
+                prev_focus_score = self._slice_focus_score_for_block(
+                    focus_capture.get("score"),
+                    block_start=current_block_start,
+                    block_end=current_block_end,
+                )
+                focus_capture["score"] = prev_focus_score
+                prev_focus_compute_indices = current_compute_indices
+
+                if histories is not None:
+                    histories.append(x.clone())
+
+                i = 1
                 while True:
                     block_mask_index = (x[:, current_block_start:current_block_end] == mask_token_id)
                     if not block_mask_index.any():
@@ -1054,7 +1107,7 @@ class DreamGenerationMixin:
 
                     current_x = x.index_select(1, compute_indices)
                     current_attention_mask = self._gather_attention_rows(attention_mask, compute_indices)
-                    current_position_ids = tok_idx if tok_idx is not None else None
+                    current_position_ids = tok_idx
 
                     focus_replace_position.zero_()
                     focus_replace_position[:, compute_indices] = True
@@ -1081,23 +1134,6 @@ class DreamGenerationMixin:
                         top_k=top_k,
                     )
 
-                    if (
-                        focus_full_confidence is None
-                        or focus_full_confidence.shape != (x.size(0), block_length)
-                        or focus_full_confidence.dtype != sample_logits.dtype
-                    ):
-                        focus_full_confidence = torch.empty(
-                            (x.size(0), block_length),
-                            device=self.device,
-                            dtype=sample_logits.dtype,
-                        )
-                    if focus_x_candidate is None or focus_x_candidate.shape != (x.size(0), block_length):
-                        focus_x_candidate = torch.empty(
-                            (x.size(0), block_length),
-                            device=self.device,
-                            dtype=torch.long,
-                        )
-
                     full_confidence = focus_full_confidence
                     full_confidence.fill_(-torch.inf)
                     relative_sample_indices = sample_indices - current_block_start
@@ -1113,18 +1149,25 @@ class DreamGenerationMixin:
                         top1_pos = full_confidence.argmax(dim=1, keepdim=True)
                         top1_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
                         top1_mask.scatter_(1, top1_pos, True)
-                        compensation_token_ids = candidate_logits.argmax(dim=-1)
-                        previous_token_ids = threshold_compensation_token_ids[relative_sample_indices]
-                        previous_scores = threshold_compensation_scores[relative_sample_indices]
-                        same_token_mask = previous_token_ids == compensation_token_ids
-                        compensated_scores = torch.where(
-                            same_token_mask,
-                            previous_scores * gamma_value + confidence.to(previous_scores.dtype),
-                            confidence.to(previous_scores.dtype),
-                        )
+                        # History compensation only looks one step back.  The dict stores entries from the
+                        # previous step for positions that were computed but did not pass threshold:
+                        #   relative position -> (previous argmax token id, previous confidence)
+                        previous_step_compensation = threshold_compensation
+                        threshold_compensation = {}
+
+                        current_argmax_token_ids = candidate_logits.argmax(dim=-1)
+                        threshold_scores = confidence.to(torch.float32).clone()
+                        for candidate_offset, relative_position in enumerate(relative_sample_indices.tolist()):
+                            previous_record = previous_step_compensation.get(relative_position)
+                            current_argmax_token_id = int(current_argmax_token_ids[candidate_offset].item())
+                            if (
+                                previous_record is not None
+                                and previous_record[0] == current_argmax_token_id
+                            ):
+                                threshold_scores[candidate_offset] += gamma_value * previous_record[1]
                         threshold_confidence = full_confidence.clone()
                         threshold_confidence[0, relative_sample_indices] = (
-                            compensated_scores.to(confidence.dtype)
+                            threshold_scores.to(confidence.dtype)
                         )
                         above_threshold_mask = threshold_confidence >= threshold_value
                         transfer_mask = top1_mask | above_threshold_mask
@@ -1140,14 +1183,16 @@ class DreamGenerationMixin:
                         # 仅本步 select 出的解码位置（用于下一步 attention 加总）
                         last_selected_indices = [int(d) for d in decoded_global_list]
 
-                        threshold_compensation_token_ids[decoded_relative] = -1
-                        threshold_compensation_scores[decoded_relative] = 0.0
                         unsampled_mask = ~transfer_mask[0, relative_sample_indices]
                         unsampled_relative_indices = relative_sample_indices[unsampled_mask]
-                        threshold_compensation_token_ids[unsampled_relative_indices] = (
-                            compensation_token_ids[unsampled_mask]
-                        )
-                        threshold_compensation_scores[unsampled_relative_indices] = compensated_scores[unsampled_mask]
+                        unsampled_token_ids = current_argmax_token_ids[unsampled_mask].tolist()
+                        unsampled_scores = confidence.to(torch.float32)[unsampled_mask].tolist()
+                        for relative_idx, token_id, score in zip(
+                            unsampled_relative_indices.tolist(),
+                            unsampled_token_ids,
+                            unsampled_scores,
+                        ):
+                            threshold_compensation[relative_idx] = (token_id, score)
                     else:
                         if alg_temp is None or alg_temp == 0 or alg == "origin":
                             _, transfer_index = torch.topk(full_confidence, 1)
@@ -1165,7 +1210,12 @@ class DreamGenerationMixin:
                         focus_update_token_indices.append(selected_index)
                         last_selected_indices = [selected_index]
 
-                    prev_focus_score = focus_capture.get("score")
+                    prev_focus_score = self._slice_focus_score_for_block(
+                        focus_capture.get("score"),
+                        block_start=current_block_start,
+                        block_end=current_block_end,
+                    )
+                    focus_capture["score"] = prev_focus_score
                     prev_focus_compute_indices = current_compute_indices
 
                     if histories is not None:
@@ -1205,6 +1255,23 @@ class DreamGenerationMixin:
         if query_index < 0:
             raise RuntimeError(f"Invalid token index {token_index} for shifted logits decoding.")
         return query_index
+
+    @staticmethod
+    def _slice_focus_score_for_block(score, block_start: int, block_end: int):
+        if score is None:
+            raise RuntimeError("No focus attention score was captured for focus_decode.")
+        block_compute_start = max(int(block_start) - 1, 0)
+        block_compute_end = int(block_end) - 1
+        if block_compute_end <= block_compute_start:
+            raise RuntimeError(
+                f"Invalid block compute range [{block_compute_start}, {block_compute_end}) for focus_decode."
+            )
+        if block_compute_end > score.shape[-1]:
+            raise RuntimeError(
+                "Captured focus attention score is shorter than the requested block slice: "
+                f"score key length={score.shape[-1]}, requested end={block_compute_end}."
+            )
+        return score[:, :, :, block_compute_start:block_compute_end].contiguous()
 
     def _select_focus_query_indices(
         self,
@@ -1256,8 +1323,8 @@ class DreamGenerationMixin:
                 f"Invalid block compute range [{block_compute_start}, {block_compute_end}) for focus_decode."
             )
 
-        # prev_score: [B, nh, Lq, Lk] -> [nh, n_selected, block_length]
-        block_score = prev_score[0][:, q_rows, block_compute_start:block_compute_end]
+        # prev_score 的 k_len 维已经在保存时裁成当前 block 的 shifted compute 区间。
+        block_score = prev_score[0][:, q_rows, :]
         # 沿 head 维度 + last-selected token 维度同时 reduce：上一步所有 select 出 token 的 attention 加总
         block_score_reduced = block_score.float().sum(dim=(0, 1))
 

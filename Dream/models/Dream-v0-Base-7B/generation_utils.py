@@ -480,6 +480,7 @@ class DreamGenerationMixin:
         focus_layer = kwargs.get("focus_layer", None)
         focus_topk = kwargs.get("focus_topk", None)
         threshold = kwargs.get("threshold", None)
+        gamma = kwargs.get("gamma", 0.1)
 
         result = self._sample(
             input_ids,
@@ -492,6 +493,7 @@ class DreamGenerationMixin:
             focus_layer=focus_layer,
             focus_topk=focus_topk,
             threshold=threshold,
+            gamma=gamma,
         )
         return result
 
@@ -507,6 +509,7 @@ class DreamGenerationMixin:
         focus_layer: Optional[int],
         focus_topk: Optional[int],
         threshold: Optional[float],
+        gamma: Optional[float],
     ) -> Union[DreamModelOutput, torch.LongTensor]:
         ctx = self._build_sample_context(
             input_ids=input_ids,
@@ -522,6 +525,8 @@ class DreamGenerationMixin:
                 dual_cache=dual_cache,
                 focus_layer=focus_layer,
                 focus_topk=focus_topk,
+                threshold=threshold,
+                gamma=gamma,
             )
         return self._sample_non_focus_decode(
             ctx=ctx,
@@ -921,6 +926,8 @@ class DreamGenerationMixin:
         dual_cache: bool,
         focus_layer: Optional[int],
         focus_topk: Optional[int],
+        threshold: Optional[float],
+        gamma: float,
     ):
         if not use_cache or not dual_cache:
             raise ValueError("focus_decode in generation_utils.py requires use_cache=True and dual_cache=True.")
@@ -942,10 +949,20 @@ class DreamGenerationMixin:
         block_length = ctx["block_length"]
         num_blocks = ctx["num_blocks"]
         inner_steps = ctx["inner_steps"]
-        timesteps = ctx["timesteps"]
         attention_mask = ctx["attention_mask"]
         tok_idx = ctx["tok_idx"]
         input_ids = ctx["input_ids"]
+
+        use_threshold = alg == "confidence_threshold"
+        if use_threshold:
+            if threshold is None:
+                raise ValueError(
+                    "alg='confidence_threshold' requires a non-None `threshold`."
+                )
+            threshold_value = float(threshold)
+            gamma_value = float(gamma)
+            if gamma_value < 0:
+                raise ValueError(f"gamma must be non-negative, got {gamma}")
 
         restore_attention, focus_capture = _patch_attention_for_raw_scores(
             _get_focus_decoder_layer(self, int(focus_layer))
@@ -956,9 +973,12 @@ class DreamGenerationMixin:
         focus_x_candidate = None
         prev_focus_score = None
         prev_focus_compute_indices = None
-        last_sampled_index = None
         past_key_values = None
+        # focus_update_token_indices: 仅用于 KV 刷新，保留最近 focus_topk 个解码 token 位置
         focus_update_token_indices = deque(maxlen=int(focus_topk))
+        # last_selected_indices: 上一步刚 select 出的解码位置列表，仅用于
+        # _select_focus_query_indices 的 attention 加总（与 update_indices 不混用）
+        last_selected_indices: list = []
 
         try:
             model_output = self(x, attention_mask, tok_idx, use_cache=True)
@@ -974,26 +994,44 @@ class DreamGenerationMixin:
                 device=x.device,
                 dtype=torch.long,
             ).unsqueeze(0)
-            last_sampled_index = int(first_decode_position)
             focus_update_token_indices.append(int(first_decode_position))
+            last_selected_indices = [int(first_decode_position)]
 
             for block_id in range(num_blocks):
                 current_block_start = input_ids.shape[1] + block_id * block_length
                 current_block_end = current_block_start + block_length
                 block_step_start = 1 if block_id == 0 else 0
+                threshold_compensation_token_ids = torch.full(
+                    (block_length,),
+                    -1,
+                    device=x.device,
+                    dtype=torch.long,
+                )
+                threshold_compensation_scores = torch.zeros(
+                    (block_length,),
+                    device=x.device,
+                    dtype=torch.float32,
+                )
 
-                for i in range(block_step_start, inner_steps):
-                    t = timesteps[i]
-                    s = timesteps[i + 1]
+                i = block_step_start
+                while True:
                     block_mask_index = (x[:, current_block_start:current_block_end] == mask_token_id)
                     if not block_mask_index.any():
                         break
+                    # 非 threshold 模式仍受 inner_steps 调度限制；threshold 模式按需循环直到 block 填满
+                    if not use_threshold and i >= inner_steps:
+                        break
 
                     masked_indices = torch.where(block_mask_index[0])[0] + current_block_start
+                    # 注意：这里用 last_selected_indices（上一步 select 出的解码位置）
+                    # 而不是 list(focus_update_token_indices)（整个 KV 刷新 deque）。
+                    # 每个 selected token t 的 q_row 位于 t-1，且因为
+                    # t = sample_query + 1，所以 t-1 必定在上一步 sample_query_indices 中，
+                    # 已包含于 prev_focus_compute_indices，无需在 compute_indices 中额外加入。
                     sample_query_indices = self._select_focus_query_indices(
                         prev_score=prev_focus_score,
                         prev_compute_indices=prev_focus_compute_indices,
-                        last_sampled_index=last_sampled_index,
+                        last_selected_indices=last_selected_indices,
                         masked_indices=masked_indices,
                         block_start=current_block_start,
                         block_end=current_block_end,
@@ -1007,6 +1045,7 @@ class DreamGenerationMixin:
                         device=x.device,
                         dtype=torch.long,
                     )
+
                     sample_query_indices = torch.sort(sample_query_indices).values
                     sample_indices = sample_query_indices + 1
                     compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
@@ -1068,21 +1107,64 @@ class DreamGenerationMixin:
                     x_candidate.fill_(mask_token_id)
                     x_candidate[0, relative_sample_indices] = sampled_tokens
 
-                    if alg_temp is None or alg_temp == 0 or alg == "origin":
-                        _, transfer_index = torch.topk(full_confidence, 1)
+                    if use_threshold:
+                        # top-1 必选（保证每步至少推进 1 个位置） + 所有 confidence >= threshold 的位置一起解锁。
+                        # 非 candidate 位置的 confidence = -inf，不会被 above_threshold_mask 选中。
+                        top1_pos = full_confidence.argmax(dim=1, keepdim=True)
+                        top1_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
+                        top1_mask.scatter_(1, top1_pos, True)
+                        compensation_token_ids = candidate_logits.argmax(dim=-1)
+                        previous_token_ids = threshold_compensation_token_ids[relative_sample_indices]
+                        previous_scores = threshold_compensation_scores[relative_sample_indices]
+                        same_token_mask = previous_token_ids == compensation_token_ids
+                        compensated_scores = torch.where(
+                            same_token_mask,
+                            previous_scores * gamma_value + confidence.to(previous_scores.dtype),
+                            confidence.to(previous_scores.dtype),
+                        )
+                        threshold_confidence = full_confidence.clone()
+                        threshold_confidence[0, relative_sample_indices] = (
+                            compensated_scores.to(confidence.dtype)
+                        )
+                        above_threshold_mask = threshold_confidence >= threshold_value
+                        transfer_mask = top1_mask | above_threshold_mask
+
+                        x[:, current_block_start:current_block_end][transfer_mask] = (
+                            x_candidate[transfer_mask]
+                        )
+
+                        decoded_relative = transfer_mask[0].nonzero(as_tuple=True)[0]
+                        decoded_global_list = (decoded_relative + current_block_start).tolist()
+                        for d in decoded_global_list:
+                            focus_update_token_indices.append(int(d))
+                        # 仅本步 select 出的解码位置（用于下一步 attention 加总）
+                        last_selected_indices = [int(d) for d in decoded_global_list]
+
+                        threshold_compensation_token_ids[decoded_relative] = -1
+                        threshold_compensation_scores[decoded_relative] = 0.0
+                        unsampled_mask = ~transfer_mask[0, relative_sample_indices]
+                        unsampled_relative_indices = relative_sample_indices[unsampled_mask]
+                        threshold_compensation_token_ids[unsampled_relative_indices] = (
+                            compensation_token_ids[unsampled_mask]
+                        )
+                        threshold_compensation_scores[unsampled_relative_indices] = compensated_scores[unsampled_mask]
                     else:
-                        sampled_confidence = full_confidence / alg_temp
-                        sampled_confidence = F.softmax(sampled_confidence, dim=-1)
-                        transfer_index = torch.multinomial(sampled_confidence, num_samples=1)
+                        if alg_temp is None or alg_temp == 0 or alg == "origin":
+                            _, transfer_index = torch.topk(full_confidence, 1)
+                        else:
+                            sampled_confidence = full_confidence / alg_temp
+                            sampled_confidence = F.softmax(sampled_confidence, dim=-1)
+                            transfer_index = torch.multinomial(sampled_confidence, num_samples=1)
 
-                    row_indices = torch.arange(x.size(0), device=self.device).unsqueeze(1)
-                    x[:, current_block_start:current_block_end][row_indices, transfer_index] = (
-                        x_candidate[row_indices, transfer_index]
-                    )
+                        row_indices = torch.arange(x.size(0), device=self.device).unsqueeze(1)
+                        x[:, current_block_start:current_block_end][row_indices, transfer_index] = (
+                            x_candidate[row_indices, transfer_index]
+                        )
 
-                    selected_index = int((transfer_index[0, 0] + current_block_start).item())
-                    focus_update_token_indices.append(selected_index) # KV update 用 unmasked token 本身，而不是前一个位置
-                    last_sampled_index = selected_index
+                        selected_index = int((transfer_index[0, 0] + current_block_start).item())
+                        focus_update_token_indices.append(selected_index)
+                        last_selected_indices = [selected_index]
+
                     prev_focus_score = focus_capture.get("score")
                     prev_focus_compute_indices = current_compute_indices
 
@@ -1091,6 +1173,8 @@ class DreamGenerationMixin:
 
                     if not (x[:, current_block_start:current_block_end] == mask_token_id).any():
                         break
+
+                    i += 1
         finally:
             restore_attention()
 
@@ -1126,23 +1210,43 @@ class DreamGenerationMixin:
         self,
         prev_score,
         prev_compute_indices,
-        last_sampled_index: int,
+        last_selected_indices,
         masked_indices: torch.LongTensor,
         block_start: int,
         block_end: int,
         focus_topk: int,
     ) -> torch.LongTensor:
+        """根据上一步 select 出的解码位置的 attention 行，预测下一次的 compute 位置。
+
+        - last_selected_indices: 上一步刚被 select 出的解码 token 全局位置列表
+          （非 threshold 模式下长度为 1，threshold 模式下可能为多个）。
+        - 不要把这里和 KV 刷新用的 update_indices/focus_update_token_indices 混淆。
+        """
         query_candidate_indices = masked_indices - 1
         query_candidate_indices = query_candidate_indices[query_candidate_indices >= 0]
         if query_candidate_indices.numel() == 0:
             return query_candidate_indices
 
         k = min(int(focus_topk), query_candidate_indices.numel())
-        last_sample_query_index = self._token_index_to_query_index(last_sampled_index)
-        query_match = (prev_compute_indices[0] == int(last_sample_query_index)).nonzero(as_tuple=True)[0]
-        if query_match.numel() == 0:
-            raise RuntimeError("Unable to align the last sampled index with captured focus attention rows.")
-        q_row = int(query_match[0].item())
+
+        # 收集 last_selected_indices 中每个 token t 的 q_row：t 的 q 位置为 t - 1（dream logit 右移）
+        # 由于 t = sample_query + 1，所以 t - 1 必定在上一步 sample_query_indices ⊂ prev_compute_indices 中
+        selected_q_rows = []
+        compute_indices_row = prev_compute_indices[0]
+        for d in last_selected_indices:
+            d_query_index = int(d) - 1
+            if d_query_index < 0:
+                continue
+            match = (compute_indices_row == d_query_index).nonzero(as_tuple=True)[0]
+            if match.numel() > 0:
+                selected_q_rows.append(int(match[0].item()))
+
+        if not selected_q_rows:
+            raise RuntimeError(
+                "Unable to align any last-selected token with captured focus attention rows."
+            )
+
+        q_rows = torch.tensor(selected_q_rows, device=prev_score.device, dtype=torch.long)
 
         # 当前 block 的计算位置（下一步要计算的 query 位置）：[block_start, block_end) 各向左移一位（dream logit 右移补偿）
         block_compute_start = max(int(block_start) - 1, 0)
@@ -1152,10 +1256,10 @@ class DreamGenerationMixin:
                 f"Invalid block compute range [{block_compute_start}, {block_compute_end}) for focus_decode."
             )
 
-        # prev_score: [B, nh, Lq, Lk] -> 取 batch 0、所有 head、当前 query row、当前 block 的 K 计算区间
-        block_score = prev_score[0, :, q_row, block_compute_start:block_compute_end]
-        # 沿 head 维度 reduce
-        block_score_reduced = block_score.float().sum(dim=0)
+        # prev_score: [B, nh, Lq, Lk] -> [nh, n_selected, block_length]
+        block_score = prev_score[0][:, q_rows, block_compute_start:block_compute_end]
+        # 沿 head 维度 + last-selected token 维度同时 reduce：上一步所有 select 出 token 的 attention 加总
+        block_score_reduced = block_score.float().sum(dim=(0, 1))
 
         # 把 mask candidate 转换成相对 block 计算区间的索引，再选 topk
         relative_candidates = query_candidate_indices - block_compute_start
@@ -1178,7 +1282,7 @@ class DreamGenerationMixin:
                 dtype=candidate_logits.dtype,
             )
             return confidence, sampled_tokens
-        if alg == "maskgit_plus":
+        if alg == "maskgit_plus" or alg == "confidence_threshold":
             return sample_tokens(
                 candidate_logits,
                 temperature=temperature,
