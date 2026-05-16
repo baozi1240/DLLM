@@ -37,6 +37,8 @@ def parse_args():
     parser.add_argument("--top_p", type=float, default=0.95)
     parser.add_argument("--alg", type=str, default="entropy")
     parser.add_argument("--alg_temp", type=float, default=0.0)
+    parser.add_argument("--threshold", type=float, default=0.9)
+    parser.add_argument("--gamma", type=float, default=0.1)
     parser.add_argument("--block_length", type=int, default=32)
     parser.add_argument("--use_cache", action="store_true")
     parser.add_argument("--dual_cache", action="store_true")
@@ -197,6 +199,8 @@ def generate_batch(model, tokenizer, batch_questions, few_shot_prefix, device, a
         focus_topk=args.focus_topk,
         alg=args.alg,
         alg_temp=args.alg_temp,
+        threshold=args.threshold,
+        gamma=args.gamma,
     )
 
     responses = []
@@ -242,6 +246,8 @@ def build_stats(
         "top_p": args.top_p,
         "alg": args.alg,
         "alg_temp": args.alg_temp,
+        "threshold": args.threshold if args.alg == "confidence_threshold" else None,
+        "gamma": args.gamma,
         "use_cache": effective_use_cache,
         "dual_cache": bool(args.dual_cache),
         "focus_decode": bool(args.focus_decode),

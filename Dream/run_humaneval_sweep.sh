@@ -4,7 +4,7 @@ set -euo pipefail
 PYTHON_BIN=python
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/eval_humaneval.py"
-FOCUS_DECODE_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Parallel"
+FOCUS_DECODE_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Sliding"
 FASTDLLM_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm"
 BASELINE_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B"
 DATASET_PATH="data/HumanEval.jsonl.gz"
@@ -12,7 +12,7 @@ OUTPUT_RUN_NAME="${OUTPUT_RUN_NAME:-$(date +%Y%m%d_%H%M%S)}"
 OUTPUT_ROOT="${SCRIPT_DIR}/humaneval_sweeps/${OUTPUT_RUN_NAME}"
 
 TIMEOUT=5.0
-ALGS=(entropy confidence_threshold)
+ALGS=(confidence_threshold)
 if [[ -n "${ALGS_OVERRIDE:-}" ]]; then
   read -r -a ALGS <<< "${ALGS_OVERRIDE}"
 elif [[ -n "${ALG:-}" ]]; then
@@ -28,17 +28,21 @@ GAMMAS=(0.1)
 if [[ -n "${GAMMAS_OVERRIDE:-}" ]]; then
   read -r -a GAMMAS <<< "${GAMMAS_OVERRIDE}"
 fi
-GEN_LENGTHS=(256 512)
+GEN_LENGTHS=(256)
+if [[ -n "${GEN_LENGTHS_OVERRIDE:-}" ]]; then
+  read -r -a GEN_LENGTHS <<< "${GEN_LENGTHS_OVERRIDE}"
+fi
 BLOCK_LENGTHS=(32)
 if [[ -n "${BLOCK_LENGTHS_OVERRIDE:-}" ]]; then
   read -r -a BLOCK_LENGTHS <<< "${BLOCK_LENGTHS_OVERRIDE}"
 fi
-MODES=(fast_dllm_dual_cache baseline)
+MODES=(focus_dual_cache)
+#MODES=(fast_dllm_dual_cache)
 if [[ -n "${MODES_OVERRIDE:-}" ]]; then
   read -r -a MODES <<< "${MODES_OVERRIDE}"
 fi
 FOCUS_LAYER=3
-FOCUS_TOPK=8
+FOCUS_TOPK=16
 
 run_case() {
   local mode_name="$1"
@@ -55,7 +59,10 @@ run_case() {
   if [[ "${alg}" == "confidence_threshold" ]]; then
     threshold_tag="${threshold//./p}"
   fi
-  local gamma_tag="${gamma//./p}"
+  local gamma_tag="na"
+  if [[ "${mode_name}" == "focus_dual_cache" && "${alg}" == "confidence_threshold" ]]; then
+    gamma_tag="${gamma//./p}"
+  fi
   local run_name="mode${mode_name}_alg${alg_tag}_th${threshold_tag}_gamma${gamma_tag}_len${gen_length}_steps${steps}_blk${block_length}"
   if [[ "${mode_name}" == "focus_dual_cache" ]]; then
     run_name="${run_name}_layer${FOCUS_LAYER}_topk${FOCUS_TOPK}"
@@ -106,7 +113,7 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
         else
           thresholds_to_run=("${THRESHOLDS[0]}")
         fi
-
+        # threshold 扫描 (Fastdllm, Focus)
         for threshold in "${thresholds_to_run[@]}"; do
           if [[ "${mode_name}" == "fast_dllm_dual_cache" ]]; then
             model_path="${FASTDLLM_MODEL_PATH}"
@@ -116,9 +123,14 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
             run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}" "${model_path}" "${alg}" "${threshold}" "${GAMMAS[0]}"
           elif [[ "${mode_name}" == "focus_dual_cache" ]]; then
             model_path="${FOCUS_DECODE_MODEL_PATH}"
-            for gamma in "${GAMMAS[@]}"; do
-              run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}" "${model_path}" "${alg}" "${threshold}" "${gamma}"
-            done
+            if [[ "${alg}" == "confidence_threshold" ]]; then
+              # gamma 扫描只对 focus_decode + confidence_threshold 生效
+              for gamma in "${GAMMAS[@]}"; do
+                run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}" "${model_path}" "${alg}" "${threshold}" "${gamma}"
+              done
+            else
+              run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}" "${model_path}" "${alg}" "${threshold}" "${GAMMAS[0]}"
+            fi
           fi
         done
       done

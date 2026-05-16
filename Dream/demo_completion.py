@@ -1,11 +1,16 @@
 import argparse
+import gzip
 import json
 import os
 import sys
 import time
+import urllib.request
 from collections import defaultdict
+from pathlib import Path
 import torch
 from transformers import AutoModel, AutoTokenizer
+
+HUMANEVAL_URL = "https://github.com/openai/human-eval/raw/master/data/HumanEval.jsonl.gz"
 
 
 def parse_args():
@@ -74,12 +79,64 @@ def parse_args():
         default=None,
         help="模型目录；默认为本脚本同级的 models/Dream-v0-Base-7B（仓库内本地权重与自定义代码）",
     )
+    parser.add_argument("--dataset_path", type=str, default="data/HumanEval.jsonl.gz")
+    parser.add_argument("--download_if_missing", action="store_true")
+    parser.add_argument("--add_bos_token", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--use_chat_template",
+        action="store_true",
+        help="使用 chat template 构造输入（user + generation prompt）进行补全。",
+    )
     return parser.parse_args()
 
 
 def default_model_path():
     """始终指向与本文件同仓库的 Dream-v0-Base-7B，不依赖进程 cwd。"""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "Dream-v0-Base-7B")
+
+
+def find_local_humaneval():
+    candidates = [
+        "data/HumanEval.jsonl.gz",
+        "data/HumanEval.jsonl",
+        str(Path.home() / ".cache" / "HumanEval.jsonl.gz"),
+        str(Path.home() / ".cache" / "HumanEval.jsonl"),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return os.path.abspath(candidate)
+    return None
+
+
+def ensure_dataset(dataset_path, download_if_missing):
+    abs_path = os.path.abspath(dataset_path)
+    if os.path.exists(abs_path):
+        return abs_path
+
+    local_found = find_local_humaneval()
+    if local_found is not None:
+        return local_found
+
+    if not download_if_missing:
+        raise FileNotFoundError(
+            f"HumanEval dataset not found at {abs_path}. "
+            "Pass --download_if_missing to fetch it."
+        )
+
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    urllib.request.urlretrieve(HUMANEVAL_URL, abs_path)
+    return abs_path
+
+
+def load_humaneval(dataset_path):
+    open_fn = gzip.open if dataset_path.endswith(".gz") else open
+    problems = []
+    with open_fn(dataset_path, "rt", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                problems.append(json.loads(line))
+    return problems
 
 def select_device():
     if torch.cuda.is_available():
@@ -768,41 +825,36 @@ if args.profile_ops:
     profile_handles, restore_callbacks, profile_stats = install_operator_profilers(model, device)
 
 
-messages = [
-     {"role": "user", "content": "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?"},
-]
-messages = [
-    {
-    "role": "user", 
-    "content": 
-"""
-    You are a writing engine optimized for maximum-length, non-truncated outputs.
-
-    Task: Produce a single continuous answer with no summaries, no “in conclusion”, no apologies, no refusals, and no meta commentary about length limits.
-
-    Hard requirements:
-
-    Target length: approximately 4096 tokens of new content (excluding this instruction block). If you are unsure about tokens, aim for ~9000–12000 English words as a practical proxy.
-    Do not stop early. Keep generating until you have fully exhausted the topic using the structure below.
-    No bullet-only mode: you may use headings, but each section must be dense paragraphs, not one-liners.
-    No repetition loops: do not repeat the same paragraph verbatim; vary details, examples, and phrasing while staying on-topic.
-    Content specification (follow exactly, in order): A) Title + 1-paragraph abstract (abstract ≤ 120 words). B) Glossary: define 80 terms related to the topic (each term: 2–4 sentences). C) Main exposition: write 40 sections. Each section must contain:
-
-    a heading
-    6–10 paragraphs
-    each paragraph 6–10 sentences
-    include at least 3 concrete examples per section (mix: historical, engineering, everyday-life, edge cases) D) Worked mini-cases: 25 cases. Each case: problem statement → assumptions → step-by-step reasoning (≥ 12 steps) → pitfalls → verification checks. E) FAQ: 60 questions, each answered with ≥ 8 sentences. F) Appendix: 50 “notes” (each note: ≥ 6 sentences) covering corner cases, failure modes, and counterarguments.
-    Topic (choose one and stay consistent; do not switch topics): “How large language models fail silently in real-world software workflows, and how teams can detect, measure, and mitigate those failures without over-relying on automation.”
-
-    Begin now. Output only the requested long-form content.
-"""
-    }
-]
-inputs = tokenizer.apply_chat_template(
-    messages, return_tensors="pt", return_dict=True, add_generation_prompt=True
-)
-input_ids = inputs.input_ids.to(device)
-attention_mask = inputs.attention_mask.to(device)
+dataset_path = ensure_dataset(args.dataset_path, args.download_if_missing)
+problems = load_humaneval(dataset_path)
+if not problems:
+    raise ValueError(f"No samples found in HumanEval dataset: {dataset_path}")
+first_problem = problems[0]
+prompt = first_problem["prompt"]
+if args.use_chat_template:
+    messages = [{"role": "user", "content": prompt}]
+    chat_inputs = tokenizer.apply_chat_template(
+        messages,
+        return_tensors="pt",
+        return_dict=True,
+        add_generation_prompt=True,
+    )
+    input_ids = chat_inputs.input_ids.to(device)
+    attention_mask = chat_inputs.attention_mask.to(device)
+else:
+    if args.add_bos_token and tokenizer.bos_token:
+        prompt = tokenizer.bos_token + prompt
+    encoded = tokenizer(prompt, return_tensors="pt")
+    input_ids = encoded.input_ids.to(device)
+    attention_mask = encoded.attention_mask.to(device)
+print(f"HumanEval first task: {first_problem['task_id']}", file=log_stream)
+if args.use_chat_template:
+    print("Prompt build mode: chat_template(user + generation_prompt)", file=log_stream)
+else:
+    print(
+        f"Prompt build mode: raw_prompt + bos({int(bool(args.add_bos_token))})",
+        file=log_stream,
+    )
 
 if args.show_time:
     synchronize_device(device)
