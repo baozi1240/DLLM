@@ -980,7 +980,7 @@ class DreamGenerationMixin:
         max_length = x.shape[1]
         prompt_length = input_ids.shape[1]
         total_focus_steps = int(ctx["inner_steps"])
-        refresh_stride = max(1, (max_length - prompt_length) // (focus_topk // 2))
+        refresh_stride = max(1, (max_length - prompt_length) // (focus_topk))
         steps_since_full_refresh = 0
 
         use_threshold = alg == "confidence_threshold"

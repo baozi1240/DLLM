@@ -22,7 +22,7 @@ GAMMAS=(0.1 0.05 0)
 GEN_LENGTHS=(256)
 BLOCK_LENGTHS=(32)
 N_SHOTS=(5)
-MODES=(fast_dllm_dual_cache focus_dual_cache)
+MODES=(focus_dual_cache fast_dllm_dual_cache)
 FOCUS_LAYERS=("${FOCUS_LAYER:-3}")
 FOCUS_TOPKS=("${FOCUS_TOPK:-16}")
 
@@ -50,6 +50,12 @@ if [[ -n "${N_SHOTS_OVERRIDE:-}" ]]; then
 fi
 if [[ -n "${MODES_OVERRIDE:-}" ]]; then
   read -r -a MODES <<< "${MODES_OVERRIDE}"
+fi
+if [[ -n "${FOCUS_LAYERS_OVERRIDE:-}" ]]; then
+  read -r -a FOCUS_LAYERS <<< "${FOCUS_LAYERS_OVERRIDE}"
+fi
+if [[ -n "${FOCUS_TOPKS_OVERRIDE:-}" ]]; then
+  read -r -a FOCUS_TOPKS <<< "${FOCUS_TOPKS_OVERRIDE}"
 fi
 if [[ -n "${FOCUS_LAYERS_OVERRIDE:-}" ]]; then
   read -r -a FOCUS_LAYERS <<< "${FOCUS_LAYERS_OVERRIDE}"
