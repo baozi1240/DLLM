@@ -1051,7 +1051,14 @@ class DreamGenerationMixin:
                 if not use_threshold and step_id >= total_focus_steps:
                     break
 
-                if prev_focus_score is None:
+                is_refresh_step = (
+                    past_key_values is None
+                    or steps_since_full_refresh >= refresh_stride
+                )
+                if is_refresh_step:
+                    decodable_window_indices = window_mask_indices[window_mask_indices > 0]
+                    sample_query_indices = decodable_window_indices - 1
+                elif prev_focus_score is None:
                     sample_query_indices = window_mask_indices[: min(focus_topk, window_mask_indices.numel())] - 1
                     sample_query_indices = sample_query_indices[sample_query_indices >= 0]
                 else:
@@ -1076,16 +1083,12 @@ class DreamGenerationMixin:
                 )
                 sample_query_indices = torch.sort(sample_query_indices).values
                 sample_indices = sample_query_indices + 1
-                is_refresh_step = (
-                    past_key_values is None
-                    or steps_since_full_refresh >= refresh_stride
-                )
                 focus_capture["q_slice_indices"] = sample_query_indices
                 focus_capture["k_slice_indices"] = self._focus_capture_key_indices(
                     window_mask_indices=window_mask_indices,
                     next_window_start=next_window_start,
                     max_length=max_length,
-                    focus_topk=focus_topk,
+                    append_limit=window_mask_indices.numel() if is_refresh_step else focus_topk,
                 )
 
                 if is_refresh_step:
@@ -1163,7 +1166,14 @@ class DreamGenerationMixin:
                         )
                     above_threshold_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
                     above_threshold_mask[0, window_sample_rows] = threshold_scores >= threshold_value
-                    transfer_mask = top1_mask | above_threshold_mask
+                    if is_refresh_step:
+                        force_min_pos = window_mask_indices[window_mask_indices > 0].min()
+                        force_min_row = torch.searchsorted(window_mask_indices, force_min_pos.unsqueeze(0))
+                        force_min_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
+                        force_min_mask[0, force_min_row] = True
+                        transfer_mask = force_min_mask | above_threshold_mask
+                    else:
+                        transfer_mask = top1_mask | above_threshold_mask
                     selected_window_rows = transfer_mask[0, : window_mask_indices.numel()].nonzero(as_tuple=True)[0]
                     selected_indices = window_mask_indices.index_select(0, selected_window_rows)
                     x[0, selected_indices] = x_candidate[0, selected_window_rows]
@@ -1276,11 +1286,9 @@ class DreamGenerationMixin:
         window_mask_indices: torch.LongTensor,
         next_window_start: int,
         max_length: int,
-        focus_topk: int,
+        append_limit: int,
     ) -> torch.LongTensor:
-        append_count = min(int(focus_topk), max(int(max_length - next_window_start), 0))
-        if append_count <= 0:
-            return window_mask_indices
+        append_count = min(int(append_limit), max(int(max_length - next_window_start), 0))
         append_candidates = torch.arange(
             next_window_start,
             next_window_start + append_count,

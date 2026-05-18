@@ -321,6 +321,18 @@ def load_model_and_tokenizer(model_path, device):
     return model, tokenizer, dtype
 
 
+def resolve_mask_token_id(model, tokenizer):
+    candidates = [
+        getattr(getattr(model, "generation_config", None), "mask_token_id", None),
+        getattr(getattr(model, "config", None), "mask_token_id", None),
+        getattr(tokenizer, "mask_token_id", None),
+    ]
+    for candidate in candidates:
+        if candidate is not None:
+            return int(candidate)
+    raise ValueError("Unable to resolve mask_token_id.")
+
+
 def build_inputs(tokenizer, prompt, device, add_bos_token):
     # Fast-dLLM compatibility: prepend BOS in the same way as eval.py / eval_humaneval.sh.
     if add_bos_token and tokenizer.bos_token:
@@ -411,10 +423,10 @@ def generate_completion(model, tokenizer, problem, args, device):
     synchronize_device(device)
     elapsed = time.perf_counter() - start_time
 
-    raw_generation = tokenizer.decode(
-        output.sequences[0, input_ids.shape[1] :].tolist(),
-        skip_special_tokens=False,
-    )
+    generated_token_ids = output.sequences[0, input_ids.shape[1] :].tolist()
+    mask_token_id = resolve_mask_token_id(model, tokenizer)
+    generated_tokens = sum(1 for token_id in generated_token_ids if int(token_id) != mask_token_id)
+    raw_generation = tokenizer.decode(generated_token_ids, skip_special_tokens=False)
     if tokenizer.eos_token:
         raw_generation = raw_generation.split(tokenizer.eos_token)[0]
 
@@ -423,7 +435,7 @@ def generate_completion(model, tokenizer, problem, args, device):
         problem=problem,
         args=args,
     )
-    return completion, raw_generation, processed_generation, extracted_code, elapsed
+    return completion, raw_generation, processed_generation, extracted_code, elapsed, generated_tokens
 
 
 def build_reference(problem):
@@ -489,6 +501,7 @@ def build_summary(
     problems,
     passed,
     total_generate_time,
+    total_generated_tokens,
     total_eval_time,
     wall_time,
     args,
@@ -509,6 +522,11 @@ def build_summary(
         "remaining": len(problems) - completed,
         "passed": passed,
         "pass_at_1": pass_at_1,
+        "total_generated_tokens": total_generated_tokens,
+        "tokens_per_second": (
+            total_generated_tokens / total_generate_time if total_generate_time > 0 else 0.0
+        ),
+        "avg_generated_tokens": total_generated_tokens / completed if completed else 0.0,
         "total_generate_time_s": total_generate_time,
         "total_eval_time_s": total_eval_time,
         "wall_time_s": wall_time,
@@ -541,6 +559,10 @@ def build_summary(
             "metric": "evaluate/code_eval",
             "per_task_samples": 1,
             "aggregate_pass_at_1": "mean(single-sample pass@1 over tasks)",
+            "tokens_per_second": (
+                "total non-mask generated tokens / total generation time; "
+                "all generated tokens are counted, including tokens after EOS"
+            ),
             "fastdllm_compat": {
                 "add_bos_token": True,
                 "escape_until": True,
@@ -579,12 +601,20 @@ def main():
     print(f"Run tag: {run_tag}")
 
     total_generate_time = 0.0
+    total_generated_tokens = 0
     total_eval_time = 0.0
     passed = 0
     wall_start = time.perf_counter()
 
     for idx, problem in enumerate(problems):
-        completion, raw_generation, processed_generation, extracted_code, gen_time = generate_completion(
+        (
+            completion,
+            raw_generation,
+            processed_generation,
+            extracted_code,
+            gen_time,
+            generated_tokens,
+        ) = generate_completion(
             model=model,
             tokenizer=tokenizer,
             problem=problem,
@@ -602,6 +632,7 @@ def main():
         eval_time = time.perf_counter() - eval_start
 
         total_generate_time += gen_time
+        total_generated_tokens += generated_tokens
         total_eval_time += eval_time
         passed += int(ok)
 
@@ -610,6 +641,8 @@ def main():
             "passed": ok,
             "pass_at_1": pass_at_1,
             "generate_time_s": gen_time,
+            "generated_tokens": generated_tokens,
+            "tokens_per_second": generated_tokens / gen_time if gen_time > 0 else 0.0,
             "eval_time_s": eval_time,
             "result": detail.get("result"),
             "completion": completion,
@@ -629,6 +662,7 @@ def main():
                 problems=problems,
                 passed=passed,
                 total_generate_time=total_generate_time,
+                total_generated_tokens=total_generated_tokens,
                 total_eval_time=total_eval_time,
                 wall_time=time.perf_counter() - wall_start,
                 args=args,
@@ -637,10 +671,13 @@ def main():
         )
 
         running_pass_at_1 = passed / (idx + 1)
+        running_tokens_per_second = total_generated_tokens / total_generate_time if total_generate_time > 0 else 0.0
         print(
             f"[{idx + 1}/{len(problems)}] {problem['task_id']} "
             f"passed={ok} pass@1={pass_at_1:.4f} "
             f"gen={gen_time:.4f}s eval={eval_time:.4f}s "
+            f"generated_tokens={generated_tokens} "
+            f"tok/s={running_tokens_per_second:.2f} "
             f"running_pass@1={running_pass_at_1:.4f}"
         )
 
@@ -653,6 +690,7 @@ def main():
         problems=problems,
         passed=passed,
         total_generate_time=total_generate_time,
+        total_generated_tokens=total_generated_tokens,
         total_eval_time=total_eval_time,
         wall_time=wall_time,
         args=args,
@@ -662,6 +700,8 @@ def main():
 
     final_pass_at_1 = summary["pass_at_1"]
     print(f"pass@1: {final_pass_at_1:.4f} ({passed}/{len(problems)})")
+    print(f"Total generated tokens: {total_generated_tokens}")
+    print(f"Tokens per second: {summary['tokens_per_second']:.4f}")
     print(f"Total generation time: {total_generate_time:.4f}s")
     print(f"Total eval time: {total_eval_time:.4f}s")
     print(f"Wall time: {wall_time:.4f}s")
