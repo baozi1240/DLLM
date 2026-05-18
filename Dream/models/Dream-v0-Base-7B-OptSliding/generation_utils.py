@@ -120,6 +120,7 @@ def _patch_attention_for_softmax_scores(target_block):
         position_embeddings=None,
         dual_cache=False,
         replace_position=None,
+        replace_indices=None,
     ):
         del cache_position
         bsz, q_len, _ = hidden_states.size()
@@ -130,19 +131,32 @@ def _patch_attention_for_softmax_scores(target_block):
 
         if past_key_value is not None:
             if dual_cache:
-                if replace_position is None:
-                    raise ValueError("`replace_position` must be provided when `dual_cache=True`.")
+                if replace_position is None and replace_indices is None:
+                    raise ValueError("`replace_position` or `replace_indices` must be provided when `dual_cache=True`.")
                 past_key, past_value = past_key_value
-                if replace_position.shape[0] != bsz:
-                    raise ValueError("batch size mismatch between hidden states and replace_position")
-                for batch_idx in range(bsz):
-                    batch_replace_indices = replace_position[batch_idx].nonzero(as_tuple=True)[0]
-                    if batch_replace_indices.numel() > 0:
-                        if batch_replace_indices.numel() != key_states.shape[1]:
-                            raise ValueError(
-                                "In dual-cache mode, the number of `replace_position` entries must match "
-                                "the number of recomputed key/value states."
+                if replace_indices is not None:
+                    if replace_indices.dim() == 1:
+                        replace_indices = replace_indices.unsqueeze(0)
+                    if replace_indices.device != key_states.device or replace_indices.dtype != torch.long:
+                        replace_indices = replace_indices.to(device=key_states.device, dtype=torch.long)
+                else:
+                    replace_indices = torch.stack(
+                        [
+                            batch_replace_position.nonzero(as_tuple=True)[0].to(
+                                device=key_states.device,
+                                dtype=torch.long,
                             )
+                            for batch_replace_position in replace_position
+                        ],
+                        dim=0,
+                    )
+                if bsz == 1:
+                    batch_replace_indices = replace_indices[0]
+                    past_key[0, batch_replace_indices, :] = key_states[0]
+                    past_value[0, batch_replace_indices, :] = value_states[0]
+                else:
+                    for batch_idx in range(bsz):
+                        batch_replace_indices = replace_indices[batch_idx]
                         past_key[batch_idx, batch_replace_indices, :] = key_states[batch_idx]
                         past_value[batch_idx, batch_replace_indices, :] = value_states[batch_idx]
                 key_states = past_key
@@ -170,6 +184,7 @@ def _patch_attention_for_softmax_scores(target_block):
                 cos,
                 sin,
                 replace_position=replace_position,
+                replace_indices=replace_indices,
             )
         else:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -195,7 +210,9 @@ def _patch_attention_for_softmax_scores(target_block):
         q_slice_indices = capture.get("q_slice_indices")
         k_slice_indices = capture.get("k_slice_indices")
         if q_slice_indices is not None:
-            if dual_cache and isinstance(replace_position, torch.Tensor):
+            if dual_cache and isinstance(replace_indices, torch.Tensor):
+                q_global_indices = replace_indices[0] if replace_indices.dim() == 2 else replace_indices
+            elif dual_cache and isinstance(replace_position, torch.Tensor):
                 q_global_indices = replace_position[0].nonzero(as_tuple=True)[0]
             else:
                 q_global_indices = torch.arange(q_len, device=attn_probs.device, dtype=torch.long)
@@ -996,12 +1013,10 @@ class DreamGenerationMixin:
             _get_focus_decoder_layer(self, int(focus_layer))
         )
 
-        focus_replace_position = torch.zeros_like(x, dtype=torch.bool)
         prev_focus_score = None
         prev_focus_compute_indices = None
         prev_focus_key_indices = None
         past_key_values = None
-        prev_replace_indices = torch.empty(0, device=x.device, dtype=torch.long)
         focus_update_token_indices = torch.empty(
             (focus_topk,),
             device=x.device,
@@ -1099,17 +1114,15 @@ class DreamGenerationMixin:
                 else:
                     # Top-k sparse computation: refresh only recent decoded tokens and
                     # current top-k sample queries selected from the previous attention slice.
-                    compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
-                    compute_indices = torch.unique(torch.sort(compute_indices).values)
+                    compute_indices = torch.unique(
+                        torch.cat([update_indices, sample_query_indices], dim=0),
+                        sorted=True,
+                    )
                     sample_rows = torch.searchsorted(compute_indices, sample_query_indices)
                     current_x = x.index_select(1, compute_indices)
                     current_attention_mask = self._gather_attention_rows(attention_mask, compute_indices)
                     current_position_ids = tok_idx
 
-                    if prev_replace_indices.numel() > 0:
-                        focus_replace_position[:, prev_replace_indices] = False
-                    focus_replace_position[:, compute_indices] = True
-                    prev_replace_indices = compute_indices
                     model_output = self(
                         current_x,
                         current_attention_mask,
@@ -1117,7 +1130,7 @@ class DreamGenerationMixin:
                         past_key_values=past_key_values,
                         use_cache=True,
                         dual_cache=True,
-                        replace_position=focus_replace_position,
+                        replace_indices=compute_indices.unsqueeze(0),
                     )
                     past_key_values = model_output.past_key_values
                     sample_logits = model_output.logits.index_select(1, sample_rows)
@@ -1131,7 +1144,14 @@ class DreamGenerationMixin:
                     top_k=top_k,
                 )
 
-                window_sample_rows = torch.searchsorted(window_mask_indices, sample_indices)
+                if is_refresh_step:
+                    window_sample_rows = torch.arange(
+                        sample_indices.numel(),
+                        device=window_mask_indices.device,
+                        dtype=torch.long,
+                    )
+                else:
+                    window_sample_rows = torch.searchsorted(window_mask_indices, sample_indices)
 
                 if use_threshold:
                     confidence_float = confidence.to(torch.float32)
@@ -1289,6 +1309,8 @@ class DreamGenerationMixin:
         append_limit: int,
     ) -> torch.LongTensor:
         append_count = min(int(append_limit), max(int(max_length - next_window_start), 0))
+        if append_count <= 0:
+            return window_mask_indices
         append_candidates = torch.arange(
             next_window_start,
             next_window_start + append_count,
