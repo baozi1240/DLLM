@@ -16,7 +16,6 @@
 import copy
 import types
 import warnings
-from collections import deque
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -967,7 +966,6 @@ class DreamGenerationMixin:
             )
         x = ctx["x"]
         histories = ctx["histories"]
-        mask_token_id = ctx["mask_token_id"]
         alg = ctx["alg"]
         alg_temp = ctx["alg_temp"]
         temperature = ctx["temperature"]
@@ -999,23 +997,18 @@ class DreamGenerationMixin:
         )
 
         focus_replace_position = torch.zeros_like(x, dtype=torch.bool)
-        focus_confidence_dtype = self.get_input_embeddings().weight.dtype
-        focus_full_confidence = torch.empty(
-            (x.size(0), block_length),
-            device=self.device,
-            dtype=focus_confidence_dtype,
-        )
-        focus_x_candidate = torch.empty(
-            (x.size(0), block_length),
-            device=self.device,
-            dtype=torch.long,
-        )
         prev_focus_score = None
         prev_focus_compute_indices = None
         prev_focus_key_indices = None
         past_key_values = None
-        focus_update_token_indices = deque(maxlen=focus_topk)
-        last_selected_indices: list = []
+        prev_replace_indices = torch.empty(0, device=x.device, dtype=torch.long)
+        focus_update_token_indices = torch.empty(
+            (focus_topk,),
+            device=x.device,
+            dtype=torch.long,
+        )
+        focus_update_count = 0
+        last_selected_indices = torch.empty(0, device=x.device, dtype=torch.long)
         initial_window_size = min(block_length, max_length - prompt_length)
         window_mask_indices = torch.arange(
             prompt_length,
@@ -1076,11 +1069,7 @@ class DreamGenerationMixin:
                 if sample_query_indices.numel() == 0:
                     raise RuntimeError("focus_decode found no sample query indices.")
 
-                update_indices = torch.tensor(
-                    list(focus_update_token_indices),
-                    device=x.device,
-                    dtype=torch.long,
-                )
+                update_indices = focus_update_token_indices[:focus_update_count]
                 sample_query_indices = torch.sort(sample_query_indices).values
                 sample_indices = sample_query_indices + 1
                 focus_capture["q_slice_indices"] = sample_query_indices
@@ -1112,13 +1101,15 @@ class DreamGenerationMixin:
                     # current top-k sample queries selected from the previous attention slice.
                     compute_indices = torch.cat([update_indices, sample_query_indices], dim=0)
                     compute_indices = torch.unique(torch.sort(compute_indices).values)
-                    sample_mask = torch.isin(compute_indices, sample_query_indices)
+                    sample_rows = torch.searchsorted(compute_indices, sample_query_indices)
                     current_x = x.index_select(1, compute_indices)
                     current_attention_mask = self._gather_attention_rows(attention_mask, compute_indices)
                     current_position_ids = tok_idx
 
-                    focus_replace_position.zero_()
+                    if prev_replace_indices.numel() > 0:
+                        focus_replace_position[:, prev_replace_indices] = False
                     focus_replace_position[:, compute_indices] = True
+                    prev_replace_indices = compute_indices
                     model_output = self(
                         current_x,
                         current_attention_mask,
@@ -1129,7 +1120,7 @@ class DreamGenerationMixin:
                         replace_position=focus_replace_position,
                     )
                     past_key_values = model_output.past_key_values
-                    sample_logits = model_output.logits[:, sample_mask]
+                    sample_logits = model_output.logits.index_select(1, sample_rows)
 
                 candidate_logits = sample_logits[0]
                 confidence, sampled_tokens = self._sample_focus_logits(
@@ -1140,80 +1131,69 @@ class DreamGenerationMixin:
                     top_k=top_k,
                 )
 
-                full_confidence = focus_full_confidence
-                full_confidence.fill_(-torch.inf)
-                x_candidate = focus_x_candidate
-                x_candidate.fill_(mask_token_id)
                 window_sample_rows = torch.searchsorted(window_mask_indices, sample_indices)
-                if sample_indices.numel() > 0:
-                    full_confidence[0, window_sample_rows] = confidence
-                    x_candidate[0, window_sample_rows] = sampled_tokens
 
                 if use_threshold:
-                    top1_pos = full_confidence.argmax(dim=1, keepdim=True)
-                    top1_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
-                    top1_mask.scatter_(1, top1_pos, True)
-                    threshold_scores = confidence.to(torch.float32)
+                    confidence_float = confidence.to(torch.float32)
+                    threshold_scores = confidence_float
                     if gamma_value > 0:
                         current_argmax_token_ids = candidate_logits.argmax(dim=-1)
                         previous_token_ids = threshold_compensation_token_ids[sample_indices]
                         previous_scores = threshold_compensation_scores[sample_indices]
                         same_token_mask = previous_token_ids == current_argmax_token_ids
-                        threshold_scores = threshold_scores + torch.where(
-                            same_token_mask,
-                            previous_scores * gamma_value,
-                            torch.zeros_like(previous_scores),
+                        threshold_scores = threshold_scores + (
+                            same_token_mask.to(dtype=previous_scores.dtype) * previous_scores * gamma_value
                         )
-                    above_threshold_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
-                    above_threshold_mask[0, window_sample_rows] = threshold_scores >= threshold_value
+                    local_transfer_mask = threshold_scores >= threshold_value
                     if is_refresh_step:
-                        force_min_pos = window_mask_indices[window_mask_indices > 0].min()
-                        force_min_row = torch.searchsorted(window_mask_indices, force_min_pos.unsqueeze(0))
-                        force_min_mask = torch.zeros_like(full_confidence, dtype=torch.bool)
-                        force_min_mask[0, force_min_row] = True
-                        transfer_mask = force_min_mask | above_threshold_mask
+                        local_transfer_mask[0] = True
                     else:
-                        transfer_mask = top1_mask | above_threshold_mask
-                    selected_window_rows = transfer_mask[0, : window_mask_indices.numel()].nonzero(as_tuple=True)[0]
-                    selected_indices = window_mask_indices.index_select(0, selected_window_rows)
-                    x[0, selected_indices] = x_candidate[0, selected_window_rows]
-                    decoded_global_list = selected_indices.tolist()
-                    for d in decoded_global_list:
-                        focus_update_token_indices.append(int(d))
-                    last_selected_indices = [int(d) for d in decoded_global_list]
+                        local_transfer_mask[confidence.argmax()] = True
+                    selected_sample_rows = local_transfer_mask.nonzero(as_tuple=True)[0]
+                    selected_window_rows = window_sample_rows.index_select(0, selected_sample_rows)
+                    selected_indices = sample_indices.index_select(0, selected_sample_rows)
+                    x[0, selected_indices] = sampled_tokens.index_select(0, selected_sample_rows)
+                    focus_update_count = self._append_focus_update_indices(
+                        focus_update_token_indices,
+                        focus_update_count,
+                        selected_indices,
+                        focus_topk,
+                    )
+                    last_selected_indices = selected_indices
 
                     if gamma_value > 0:
                         threshold_compensation_token_ids[window_mask_indices] = -1
                         threshold_compensation_scores[window_mask_indices] = 0
-                        unsampled_mask = ~transfer_mask[0, window_sample_rows]
-                        if unsampled_mask.any():
-                            unsampled_indices = sample_indices[unsampled_mask]
-                            threshold_compensation_token_ids[unsampled_indices] = (
-                                current_argmax_token_ids[unsampled_mask]
-                            )
-                            threshold_compensation_scores[unsampled_indices] = (
-                                confidence.to(torch.float32)[unsampled_mask]
-                            )
+                        unsampled_mask = ~local_transfer_mask
+                        unsampled_indices = sample_indices[unsampled_mask]
+                        threshold_compensation_token_ids[unsampled_indices] = (
+                            current_argmax_token_ids[unsampled_mask]
+                        )
+                        threshold_compensation_scores[unsampled_indices] = (
+                            confidence_float[unsampled_mask]
+                        )
                 else:
                     if alg_temp is None or alg_temp == 0 or alg == "origin":
-                        _, transfer_index = torch.topk(full_confidence, 1)
+                        transfer_sample_rows = torch.topk(confidence, 1).indices
                     else:
-                        sampled_confidence = full_confidence / alg_temp
+                        sampled_confidence = confidence / alg_temp
                         sampled_confidence = F.softmax(sampled_confidence, dim=-1)
-                        transfer_index = torch.multinomial(sampled_confidence, num_samples=1)
-                    selected_window_rows = transfer_index[0]
-                    selected_indices = window_mask_indices.index_select(0, selected_window_rows)
-                    x[0, selected_indices] = x_candidate[0, selected_window_rows]
-                    selected_index = int(selected_indices[0].item())
-                    focus_update_token_indices.append(selected_index)
-                    last_selected_indices = [selected_index]
-
-                if selected_indices.numel() == 0:
-                    raise RuntimeError("focus_decode selected no positions from the current dynamic window.")
+                        transfer_sample_rows = torch.multinomial(sampled_confidence, num_samples=1)
+                    selected_window_rows = window_sample_rows.index_select(0, transfer_sample_rows)
+                    selected_indices = sample_indices.index_select(0, transfer_sample_rows)
+                    x[0, selected_indices] = sampled_tokens.index_select(0, transfer_sample_rows)
+                    focus_update_count = self._append_focus_update_indices(
+                        focus_update_token_indices,
+                        focus_update_count,
+                        selected_indices,
+                        focus_topk,
+                    )
+                    last_selected_indices = selected_indices
 
                 window_mask_indices, next_window_start = self._advance_focus_window(
                     window_mask_indices=window_mask_indices,
                     selected_indices=selected_indices,
+                    selected_window_rows=selected_window_rows,
                     next_window_start=next_window_start,
                     max_length=max_length,
                 )
@@ -1251,6 +1231,24 @@ class DreamGenerationMixin:
         return trimmed
 
     @staticmethod
+    def _append_focus_update_indices(
+        buffer: torch.LongTensor,
+        count: int,
+        new_indices: torch.LongTensor,
+        maxlen: int,
+    ) -> int:
+        new_count = int(new_indices.numel())
+        if new_count >= maxlen:
+            buffer.copy_(new_indices[-maxlen:])
+            return maxlen
+
+        keep_count = min(int(count), maxlen - new_count)
+        if keep_count > 0:
+            buffer[:keep_count].copy_(buffer[count - keep_count : count].clone())
+        buffer[keep_count : keep_count + new_count].copy_(new_indices)
+        return keep_count + new_count
+
+    @staticmethod
     def _gather_attention_rows(mask, query_indices):
         if mask == "full":
             return mask
@@ -1260,13 +1258,15 @@ class DreamGenerationMixin:
     def _advance_focus_window(
         window_mask_indices: torch.LongTensor,
         selected_indices: torch.LongTensor,
+        selected_window_rows: torch.LongTensor,
         next_window_start: int,
         max_length: int,
     ):
         if selected_indices.numel() == 0:
             return window_mask_indices, next_window_start
 
-        keep_mask = ~torch.isin(window_mask_indices, selected_indices)
+        keep_mask = torch.ones(window_mask_indices.numel(), device=window_mask_indices.device, dtype=torch.bool)
+        keep_mask[selected_window_rows] = False
         remaining_window = window_mask_indices[keep_mask]
         append_count = min(int(selected_indices.numel()), max(int(max_length - next_window_start), 0))
         if append_count > 0:
@@ -1311,12 +1311,6 @@ class DreamGenerationMixin:
             focus_capture["score_k_indices"] = window_mask_indices
             return
         key_rows = torch.searchsorted(key_indices, window_mask_indices)
-        valid_key_rows = (
-            (key_rows < key_indices.numel())
-            & (key_indices[key_rows.clamp(max=max(key_indices.numel() - 1, 0))] == window_mask_indices)
-        )
-        if not valid_key_rows.all():
-            raise RuntimeError("Unable to narrow focus attention scores to the advanced dynamic window.")
         focus_capture["score"] = score.index_select(3, key_rows)
         focus_capture["score_k_indices"] = window_mask_indices
 
@@ -1329,24 +1323,8 @@ class DreamGenerationMixin:
         query_indices = focus_capture.get("score_q_indices")
         if score is None or query_indices is None:
             return
-        selected_query_indices = selected_indices[selected_indices > 0] - 1
-        if selected_query_indices.numel() == 0:
-            focus_capture["score"] = score.index_select(
-                2,
-                torch.empty(0, device=score.device, dtype=torch.long),
-            )
-            focus_capture["score_q_indices"] = selected_query_indices
-            return
+        selected_query_indices = selected_indices - 1
         query_rows = torch.searchsorted(query_indices, selected_query_indices)
-        valid_query_rows = (
-            (query_rows < query_indices.numel())
-            & (
-                query_indices[query_rows.clamp(max=max(query_indices.numel() - 1, 0))]
-                == selected_query_indices
-            )
-        )
-        if not valid_query_rows.all():
-            raise RuntimeError("Unable to narrow focus attention scores to selected decode queries.")
         focus_capture["score"] = score.index_select(2, query_rows)
         focus_capture["score_q_indices"] = selected_query_indices
 
@@ -1389,38 +1367,14 @@ class DreamGenerationMixin:
             return query_candidate_indices
 
         # 收集 last_selected_indices 中每个 token t 的 q_row：t 的 q 位置为 t - 1（dream logit 右移）
-        # 由于 t = sample_query + 1，所以 t - 1 必定在上一步 sample_query_indices ⊂ prev_compute_indices 中
-        selected_q_rows = []
+        # 由于 t = sample_query + 1，所以 t - 1 应在上一步 sample_query_indices ⊂ prev_compute_indices 中
         compute_indices_row = prev_compute_indices[0]
-        for d in last_selected_indices:
-            d_query_index = int(d) - 1
-            if d_query_index < 0:
-                continue
-            match = (compute_indices_row == d_query_index).nonzero(as_tuple=True)[0]
-            if match.numel() > 0:
-                selected_q_rows.append(int(match[0].item()))
-
-        if not selected_q_rows:
-            raise RuntimeError(
-                "Unable to align any last-selected token with captured focus attention rows."
-            )
-
-        q_rows = torch.tensor(selected_q_rows, device=prev_score.device, dtype=torch.long)
+        d_query_indices = last_selected_indices - 1
+        q_rows = torch.searchsorted(compute_indices_row, d_query_indices)
 
         if prev_key_indices is None or prev_key_indices.numel() == 0:
             return query_candidate_indices[:0]
         key_rows = torch.searchsorted(prev_key_indices, token_candidate_indices)
-        valid_key_rows = (
-            (key_rows < prev_key_indices.numel())
-            & (
-                prev_key_indices[key_rows.clamp(max=max(prev_key_indices.numel() - 1, 0))]
-                == token_candidate_indices
-            )
-        )
-        query_candidate_indices = query_candidate_indices[valid_key_rows]
-        key_rows = key_rows[valid_key_rows]
-        if query_candidate_indices.numel() == 0:
-            return query_candidate_indices
 
         k = min(int(focus_topk), query_candidate_indices.numel())
 

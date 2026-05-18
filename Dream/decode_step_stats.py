@@ -651,7 +651,8 @@ def main():
     print(
         "Decode throughput: "
         f"{summary['tokens_per_second']:.4f} tokens/s "
-        f"({summary['total_new_tokens']} generated tokens)"
+        f"({summary['total_new_tokens']} generated tokens, "
+        f"generate_time={summary['elapsed_time_s']:.4f}s)"
     )
     print(f"JSON saved to: {json_path}")
     print(f"CSV saved to: {csv_path}")
