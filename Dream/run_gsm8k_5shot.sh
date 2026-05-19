@@ -7,7 +7,7 @@ PYTHON_SCRIPT="${SCRIPT_DIR}/eval_gsm8k.py"
 SUMMARY_SCRIPT="${SCRIPT_DIR}/scripts/summarize_gsm8k_sweep.py"
 BASELINE_MODEL_PATH="${BASELINE_MODEL_PATH:-${MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B}}"
 FASTDLLM_MODEL_PATH="${FASTDLLM_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm}"
-FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Sliding}"
+FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-OptSliding}"
 DATASET_PATH="${DATASET_PATH:-}"
 SPLIT="${SPLIT:-test}"
 MAX_SAMPLES="${MAX_SAMPLES:-}"
@@ -18,8 +18,8 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-${SCRIPT_DIR}/gsm8k_sweeps/${OUTPUT_RUN_NAME}}"
 
 ALGS=(confidence_threshold)
 THRESHOLDS=(0.9)
-GAMMAS=(0.1 0.05 0)
-GEN_LENGTHS=(256)
+GAMMAS=(0.1)
+GEN_LENGTHS=(256 512)
 BLOCK_LENGTHS=(32)
 N_SHOTS=(5)
 MODES=(focus_dual_cache fast_dllm_dual_cache)
@@ -50,12 +50,6 @@ if [[ -n "${N_SHOTS_OVERRIDE:-}" ]]; then
 fi
 if [[ -n "${MODES_OVERRIDE:-}" ]]; then
   read -r -a MODES <<< "${MODES_OVERRIDE}"
-fi
-if [[ -n "${FOCUS_LAYERS_OVERRIDE:-}" ]]; then
-  read -r -a FOCUS_LAYERS <<< "${FOCUS_LAYERS_OVERRIDE}"
-fi
-if [[ -n "${FOCUS_TOPKS_OVERRIDE:-}" ]]; then
-  read -r -a FOCUS_TOPKS <<< "${FOCUS_TOPKS_OVERRIDE}"
 fi
 if [[ -n "${FOCUS_LAYERS_OVERRIDE:-}" ]]; then
   read -r -a FOCUS_LAYERS <<< "${FOCUS_LAYERS_OVERRIDE}"
@@ -150,7 +144,6 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
     for block_length in "${BLOCK_LENGTHS[@]}"; do
       for mode_name in "${MODES[@]}"; do
         for alg in "${ALGS[@]}"; do
-          # baseline 不启用 threshold
           if [[ "${mode_name}" == "baseline" && "${alg}" == "confidence_threshold" ]]; then
             continue
           fi
@@ -173,7 +166,6 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
               for focus_layer in "${FOCUS_LAYERS[@]}"; do
                 for focus_topk in "${FOCUS_TOPKS[@]}"; do
                   if [[ "${alg}" == "confidence_threshold" ]]; then
-                    # gamma 扫描只对 focus_decode + confidence_threshold 生效
                     for gamma in "${GAMMAS[@]}"; do
                       run_case "${mode_name}" "${gen_length}" "${steps}" "${n_shot}" "${block_length}" "${model_path}" "${alg}" "${threshold}" "${gamma}" "${focus_layer}" "${focus_topk}"
                     done

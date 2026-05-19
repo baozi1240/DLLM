@@ -1,243 +1,185 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_ALLOW_CODE_EVAL="${HF_ALLOW_CODE_EVAL:-1}"
-export HF_DATASETS_TRUST_REMOTE_CODE="${HF_DATASETS_TRUST_REMOTE_CODE:-true}"
-
+PYTHON_BIN="${PYTHON_BIN:-python}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EVAL_SCRIPT_DEFAULT="${SCRIPT_DIR}/../../Fast-dLLM/dream/eval.py"
-EVAL_SCRIPT="${EVAL_SCRIPT:-$EVAL_SCRIPT_DEFAULT}"
-LAUNCHER="${LAUNCHER:-accelerate launch}"
+PYTHON_SCRIPT="${SCRIPT_DIR}/eval_mbpp.py"
+BASELINE_MODEL_PATH="${BASELINE_MODEL_PATH:-${MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B}}"
+FASTDLLM_MODEL_PATH="${FASTDLLM_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm}"
+FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Softmax}"
+DATASET_PATH="${DATASET_PATH:-${SCRIPT_DIR}/data/mbpp}"
+SPLIT="${SPLIT:-test}"
+FEWSHOT_SPLIT="${FEWSHOT_SPLIT:-prompt}"
+MAX_SAMPLES="${MAX_SAMPLES:-}"
+START_INDEX="${START_INDEX:-0}"
+END_INDEX="${END_INDEX:-}"
+OUTPUT_RUN_NAME="${OUTPUT_RUN_NAME:-$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${SCRIPT_DIR}/mbpp_sweeps/${OUTPUT_RUN_NAME}}"
 
-TASK="${TASK:-mbpp}"
-MODEL_PATH="${MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B}"
-NUM_FEWSHOT="${NUM_FEWSHOT:-3}"
-BATCH_SIZE="${BATCH_SIZE:-1}"
-MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-256}"
-STEPS="${STEPS:-256}"
+THRESHOLDS=(0.9)
+GAMMAS=(0.1)
+GEN_LENGTHS=(256 512)
 BLOCK_LENGTHS=(32)
-FOCUS_TOPKS=(4 6 8)
-FOCUS_LAYERS=(0 1 3 5)
-EXTRA_MODEL_ARGS="${EXTRA_MODEL_ARGS:-}"
-EXTRA_EVAL_ARGS="${EXTRA_EVAL_ARGS:-}"
+N_SHOTS=(3)
+MODES=(baseline fast_dllm_dual_cache focus_decode)
+FOCUS_LAYERS=("${FOCUS_LAYER:-3}")
+FOCUS_TOPKS=("${FOCUS_TOPK:-16}")
 
-timestamp="$(date +%Y%m%d_%H%M%S)"
-OUTPUT_ROOT_DEFAULT="${SCRIPT_DIR}/mbpp_sweeps/${timestamp}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-$OUTPUT_ROOT_DEFAULT}"
+if [[ -n "${THRESHOLDS_OVERRIDE:-}" ]]; then
+  read -r -a THRESHOLDS <<< "${THRESHOLDS_OVERRIDE}"
+elif [[ -n "${THRESHOLD:-}" ]]; then
+  THRESHOLDS=("${THRESHOLD}")
+fi
+if [[ -n "${GAMMAS_OVERRIDE:-}" ]]; then
+  read -r -a GAMMAS <<< "${GAMMAS_OVERRIDE}"
+fi
+if [[ -n "${GEN_LENGTHS_OVERRIDE:-}" ]]; then
+  read -r -a GEN_LENGTHS <<< "${GEN_LENGTHS_OVERRIDE}"
+fi
+if [[ -n "${BLOCK_LENGTHS_OVERRIDE:-}" ]]; then
+  read -r -a BLOCK_LENGTHS <<< "${BLOCK_LENGTHS_OVERRIDE}"
+fi
+if [[ -n "${N_SHOTS_OVERRIDE:-}" ]]; then
+  read -r -a N_SHOTS <<< "${N_SHOTS_OVERRIDE}"
+fi
+if [[ -n "${MODES_OVERRIDE:-}" ]]; then
+  read -r -a MODES <<< "${MODES_OVERRIDE}"
+fi
+if [[ -n "${FOCUS_LAYERS_OVERRIDE:-}" ]]; then
+  read -r -a FOCUS_LAYERS <<< "${FOCUS_LAYERS_OVERRIDE}"
+fi
+if [[ -n "${FOCUS_TOPKS_OVERRIDE:-}" ]]; then
+  read -r -a FOCUS_TOPKS <<< "${FOCUS_TOPKS_OVERRIDE}"
+fi
 
-usage() {
-  cat <<'EOF'
-Usage:
-  bash run_mbpp_3shot.sh [options]
-
-Options:
-  --output_root PATH
-  --model_path PATH
-  --task NAME
-  --num_fewshot N
-  --batch_size N
-  --block_lengths CSV     e.g. 32,64
-  --focus_layers CSV      e.g. 0,1,3,5
-  --focus_topks CSV       e.g. 4,6,8
-  --extra_model_args "..."
-  --extra_eval_args "..."
-EOF
-}
-
-csv_to_array() {
-  local csv="$1"
-  local -n out_arr=$2
-  IFS=',' read -r -a out_arr <<< "$csv"
-}
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --output_root)
-      OUTPUT_ROOT="$2"
-      shift 2
-      ;;
-    --model_path)
-      MODEL_PATH="$2"
-      shift 2
-      ;;
-    --task)
-      TASK="$2"
-      shift 2
-      ;;
-    --num_fewshot)
-      NUM_FEWSHOT="$2"
-      shift 2
-      ;;
-    --batch_size)
-      BATCH_SIZE="$2"
-      shift 2
-      ;;
-    --block_lengths)
-      csv_to_array "$2" BLOCK_LENGTHS
-      shift 2
-      ;;
-    --focus_layers)
-      csv_to_array "$2" FOCUS_LAYERS
-      shift 2
-      ;;
-    --focus_topks)
-      csv_to_array "$2" FOCUS_TOPKS
-      shift 2
-      ;;
-    --extra_model_args)
-      EXTRA_MODEL_ARGS="$2"
-      shift 2
-      ;;
-    --extra_eval_args)
-      EXTRA_EVAL_ARGS="$2"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown argument: $1"
-      usage
-      exit 1
-      ;;
-  esac
-done
-
-if [[ ! -f "${EVAL_SCRIPT}" ]]; then
-  echo "ERROR: eval script not found: ${EVAL_SCRIPT}"
+if [[ ! -f "${PYTHON_SCRIPT}" ]]; then
+  echo "ERROR: Python script not found: ${PYTHON_SCRIPT}"
   exit 1
 fi
 
+normalize_mode_name() {
+  local mode_name="$1"
+  case "${mode_name}" in
+    focus_dual_cache)
+      echo "focus_decode"
+      ;;
+    *)
+      echo "${mode_name}"
+      ;;
+  esac
+}
+
+run_case() {
+  local mode_name="$1"
+  local gen_length="$2"
+  local steps="$3"
+  local n_shot="$4"
+  local block_length="$5"
+  local model_path="$6"
+  local threshold="$7"
+  local gamma="$8"
+  local focus_layer="${9:-}"
+  local focus_topk="${10:-}"
+
+  local alg="entropy"
+  if [[ "${mode_name}" != "baseline" ]]; then
+    alg="confidence_threshold"
+  fi
+
+  local alg_tag="${alg//[^[:alnum:]]/_}"
+  local threshold_tag="na"
+  local gamma_tag="na"
+  if [[ "${alg}" == "confidence_threshold" ]]; then
+    threshold_tag="${threshold//./p}"
+    if [[ "${mode_name}" == "focus_decode" ]]; then
+      gamma_tag="${gamma//./p}"
+    fi
+  fi
+
+  local run_name="mode${mode_name}_alg${alg_tag}_th${threshold_tag}_gamma${gamma_tag}_len${gen_length}_steps${steps}_shot${n_shot}_blk${block_length}"
+  if [[ "${mode_name}" == "focus_decode" ]]; then
+    run_name="${run_name}_layer${focus_layer}_topk${focus_topk}"
+  fi
+
+  local run_dir="${OUTPUT_ROOT}/${run_name}"
+  mkdir -p "${run_dir}"
+
+  local mode_args=()
+  if [[ "${mode_name}" == "fast_dllm_dual_cache" ]]; then
+    mode_args=(--use_cache --dual_cache)
+  elif [[ "${mode_name}" == "focus_decode" ]]; then
+    mode_args=(--use_cache --dual_cache --focus_decode --focus_layer "${focus_layer}" --focus_topk "${focus_topk}")
+  elif [[ "${mode_name}" != "baseline" ]]; then
+    echo "ERROR: Unknown mode: ${mode_name}"
+    exit 1
+  fi
+
+  local cmd=(
+    "${PYTHON_BIN}" -u "${PYTHON_SCRIPT}"
+    --model_path "${model_path}"
+    --split "${SPLIT}"
+    --fewshot_split "${FEWSHOT_SPLIT}"
+    --start "${START_INDEX}"
+    --n_shot "${n_shot}"
+    --max_new_tokens "${gen_length}"
+    --steps "${steps}"
+    --alg "${alg}"
+    --threshold "${threshold}"
+    --gamma "${gamma}"
+    --block_length "${block_length}"
+    --output_path "${run_dir}/mbpp_results.jsonl"
+    --stats_path "${run_dir}/mbpp_stats.json"
+    --confirm_run_unsafe_code
+    --add_bos_token
+    --escape_until
+    "${mode_args[@]}"
+  )
+
+  if [[ -n "${DATASET_PATH}" ]]; then
+    cmd+=(--dataset_path "${DATASET_PATH}")
+  fi
+  if [[ -n "${MAX_SAMPLES}" ]]; then
+    cmd+=(--max_samples "${MAX_SAMPLES}")
+  fi
+  if [[ -n "${END_INDEX}" ]]; then
+    cmd+=(--end "${END_INDEX}")
+  fi
+
+  echo "Running ${run_name} with model ${model_path}"
+  "${cmd[@]}" 2>&1 | tee "${run_dir}/stdout.log"
+}
+
 mkdir -p "${OUTPUT_ROOT}"
-SUMMARY_LOG="${OUTPUT_ROOT}/summary.log"
 
-{
-  echo "Sweep started at $(date)"
-  echo "Eval script: ${EVAL_SCRIPT}"
-  echo "Task: ${TASK}"
-  echo "Model path: ${MODEL_PATH}"
-  echo "Output root: ${OUTPUT_ROOT}"
-  echo "num_fewshot: ${NUM_FEWSHOT}"
-  echo "batch_size: ${BATCH_SIZE}"
-  echo "max_new_tokens: ${MAX_NEW_TOKENS}"
-  echo "steps: ${STEPS}"
-  echo "block_lengths: ${BLOCK_LENGTHS[*]}"
-  echo "focus_layers: ${FOCUS_LAYERS[*]}"
-  echo "focus_topks: ${FOCUS_TOPKS[*]}"
-  echo
-} | tee "${SUMMARY_LOG}"
-
-total_runs=0
-for block_length in "${BLOCK_LENGTHS[@]}"; do
-  total_runs=$((total_runs + 1))
-  total_runs=$((total_runs + ${#FOCUS_LAYERS[@]} * ${#FOCUS_TOPKS[@]}))
-done
-
-run_id=0
-for block_length in "${BLOCK_LENGTHS[@]}"; do
-  for mode_name in fast_dllm_dual_cache; do
-    run_id=$((run_id + 1))
-    run_name="mode${mode_name}_layer0_topk0_len${MAX_NEW_TOKENS}_steps${STEPS}_shot${NUM_FEWSHOT}_blk${block_length}"
-    run_dir="${OUTPUT_ROOT}/${run_name}"
-    stdout_log="${run_dir}/stdout.log"
-    output_path="${run_dir}/${TASK}"
-
-    mkdir -p "${run_dir}"
-
-    model_args="pretrained=${MODEL_PATH},max_new_tokens=${MAX_NEW_TOKENS},diffusion_steps=${STEPS},add_bos_token=true,alg=entropy,escape_until=true,block_length=${block_length},use_cache=true,dual_cache=true"
-    if [[ -n "${EXTRA_MODEL_ARGS}" ]]; then
-      model_args="${model_args},${EXTRA_MODEL_ARGS}"
-    fi
-
-    cmd=(
-      ${LAUNCHER}
-      "${EVAL_SCRIPT}"
-      --model dream
-      --model_args "${model_args}"
-      --tasks "${TASK}"
-      --num_fewshot "${NUM_FEWSHOT}"
-      --batch_size "${BATCH_SIZE}"
-      --output_path "${output_path}"
-      --log_samples
-      --confirm_run_unsafe_code
-    )
-
-    echo "[${run_id}/${total_runs}] Running ${run_name}" | tee -a "${SUMMARY_LOG}"
-    echo "Command: ${cmd[*]} ${EXTRA_EVAL_ARGS}" | tee -a "${SUMMARY_LOG}"
-
-    if [[ -n "${EXTRA_EVAL_ARGS}" ]]; then
-      # shellcheck disable=SC2086
-      if ${cmd[@]} ${EXTRA_EVAL_ARGS} 2>&1 | tee "${stdout_log}"; then
-        echo "[${run_id}/${total_runs}] Finished ${run_name}" | tee -a "${SUMMARY_LOG}"
-      else
-        echo "[${run_id}/${total_runs}] FAILED ${run_name}" | tee -a "${SUMMARY_LOG}"
-        echo "See log: ${stdout_log}" | tee -a "${SUMMARY_LOG}"
-      fi
-    else
-      if "${cmd[@]}" 2>&1 | tee "${stdout_log}"; then
-        echo "[${run_id}/${total_runs}] Finished ${run_name}" | tee -a "${SUMMARY_LOG}"
-      else
-        echo "[${run_id}/${total_runs}] FAILED ${run_name}" | tee -a "${SUMMARY_LOG}"
-        echo "See log: ${stdout_log}" | tee -a "${SUMMARY_LOG}"
-      fi
-    fi
-
-    echo | tee -a "${SUMMARY_LOG}"
-  done
-
-  for focus_layer in "${FOCUS_LAYERS[@]}"; do
-    for focus_topk in "${FOCUS_TOPKS[@]}"; do
-      run_id=$((run_id + 1))
-      run_name="modefocus_dual_cache_layer${focus_layer}_topk${focus_topk}_len${MAX_NEW_TOKENS}_steps${STEPS}_shot${NUM_FEWSHOT}_blk${block_length}"
-      run_dir="${OUTPUT_ROOT}/${run_name}"
-      stdout_log="${run_dir}/stdout.log"
-      output_path="${run_dir}/${TASK}"
-
-      mkdir -p "${run_dir}"
-
-      model_args="pretrained=${MODEL_PATH},max_new_tokens=${MAX_NEW_TOKENS},diffusion_steps=${STEPS},add_bos_token=true,alg=entropy,escape_until=true,block_length=${block_length},use_cache=true,dual_cache=true,focus_decode=true,focus_layer=${focus_layer},focus_topk=${focus_topk}"
-      if [[ -n "${EXTRA_MODEL_ARGS}" ]]; then
-        model_args="${model_args},${EXTRA_MODEL_ARGS}"
-      fi
-
-      cmd=(
-        ${LAUNCHER}
-        "${EVAL_SCRIPT}"
-        --model dream
-        --model_args "${model_args}"
-        --tasks "${TASK}"
-        --num_fewshot "${NUM_FEWSHOT}"
-        --batch_size "${BATCH_SIZE}"
-        --output_path "${output_path}"
-        --log_samples
-        --confirm_run_unsafe_code
-      )
-
-      echo "[${run_id}/${total_runs}] Running ${run_name}" | tee -a "${SUMMARY_LOG}"
-      echo "Command: ${cmd[*]} ${EXTRA_EVAL_ARGS}" | tee -a "${SUMMARY_LOG}"
-
-      if [[ -n "${EXTRA_EVAL_ARGS}" ]]; then
-        # shellcheck disable=SC2086
-        if ${cmd[@]} ${EXTRA_EVAL_ARGS} 2>&1 | tee "${stdout_log}"; then
-          echo "[${run_id}/${total_runs}] Finished ${run_name}" | tee -a "${SUMMARY_LOG}"
+for gen_length in "${GEN_LENGTHS[@]}"; do
+  steps="${gen_length}"
+  for n_shot in "${N_SHOTS[@]}"; do
+    for block_length in "${BLOCK_LENGTHS[@]}"; do
+      for raw_mode_name in "${MODES[@]}"; do
+        mode_name="$(normalize_mode_name "${raw_mode_name}")"
+        if [[ "${mode_name}" == "baseline" ]]; then
+          run_case "${mode_name}" "${gen_length}" "${steps}" "${n_shot}" "${block_length}" "${BASELINE_MODEL_PATH}" "${THRESHOLDS[0]}" "${GAMMAS[0]}"
+        elif [[ "${mode_name}" == "fast_dllm_dual_cache" ]]; then
+          for threshold in "${THRESHOLDS[@]}"; do
+            run_case "${mode_name}" "${gen_length}" "${steps}" "${n_shot}" "${block_length}" "${FASTDLLM_MODEL_PATH}" "${threshold}" "${GAMMAS[0]}"
+          done
+        elif [[ "${mode_name}" == "focus_decode" ]]; then
+          for threshold in "${THRESHOLDS[@]}"; do
+            for focus_layer in "${FOCUS_LAYERS[@]}"; do
+              for focus_topk in "${FOCUS_TOPKS[@]}"; do
+                for gamma in "${GAMMAS[@]}"; do
+                  run_case "${mode_name}" "${gen_length}" "${steps}" "${n_shot}" "${block_length}" "${FOCUS_DECODE_MODEL_PATH}" "${threshold}" "${gamma}" "${focus_layer}" "${focus_topk}"
+                done
+              done
+            done
+          done
         else
-          echo "[${run_id}/${total_runs}] FAILED ${run_name}" | tee -a "${SUMMARY_LOG}"
-          echo "See log: ${stdout_log}" | tee -a "${SUMMARY_LOG}"
+          echo "ERROR: Unknown mode: ${mode_name}"
+          exit 1
         fi
-      else
-        if "${cmd[@]}" 2>&1 | tee "${stdout_log}"; then
-          echo "[${run_id}/${total_runs}] Finished ${run_name}" | tee -a "${SUMMARY_LOG}"
-        else
-          echo "[${run_id}/${total_runs}] FAILED ${run_name}" | tee -a "${SUMMARY_LOG}"
-          echo "See log: ${stdout_log}" | tee -a "${SUMMARY_LOG}"
-        fi
-      fi
-
-      echo | tee -a "${SUMMARY_LOG}"
+      done
     done
   done
 done
 
-echo "Sweep finished at $(date)" | tee -a "${SUMMARY_LOG}"
-echo "All outputs are under: ${OUTPUT_ROOT}" | tee -a "${SUMMARY_LOG}"
+echo "Done. Outputs: ${OUTPUT_ROOT}"

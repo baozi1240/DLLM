@@ -4,7 +4,7 @@ set -euo pipefail
 PYTHON_BIN=python
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/eval_humaneval.py"
-FOCUS_DECODE_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Sliding"
+FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Softmax}"
 FASTDLLM_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm"
 BASELINE_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B"
 DATASET_PATH="data/HumanEval.jsonl.gz"
@@ -28,7 +28,7 @@ GAMMAS=(0.1)
 if [[ -n "${GAMMAS_OVERRIDE:-}" ]]; then
   read -r -a GAMMAS <<< "${GAMMAS_OVERRIDE}"
 fi
-GEN_LENGTHS=(256)
+GEN_LENGTHS=(256 512)
 if [[ -n "${GEN_LENGTHS_OVERRIDE:-}" ]]; then
   read -r -a GEN_LENGTHS <<< "${GEN_LENGTHS_OVERRIDE}"
 fi
@@ -36,8 +36,8 @@ BLOCK_LENGTHS=(32)
 if [[ -n "${BLOCK_LENGTHS_OVERRIDE:-}" ]]; then
   read -r -a BLOCK_LENGTHS <<< "${BLOCK_LENGTHS_OVERRIDE}"
 fi
-MODES=(focus_dual_cache)
-#MODES=(fast_dllm_dual_cache)
+#MODES=(fast_dllm_dual_cache focus_dual_cache)
+MODES=(focus_dual_cache fast_dllm_dual_cache)
 if [[ -n "${MODES_OVERRIDE:-}" ]]; then
   read -r -a MODES <<< "${MODES_OVERRIDE}"
 fi
@@ -92,6 +92,7 @@ run_case() {
     --timeout "${TIMEOUT}" \
     --confirm_run_unsafe_code \
     --output_dir "${run_dir}" \
+    --add_bos_token \
     "${mode_args[@]}" \
     2>&1 | tee "${run_dir}/stdout.log"
 }
@@ -103,7 +104,6 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
   for block_length in "${BLOCK_LENGTHS[@]}"; do
     for mode_name in "${MODES[@]}"; do
       for alg in "${ALGS[@]}"; do
-        # baseline 不启用 threshold
         if [[ "${mode_name}" == "baseline" && "${alg}" == "confidence_threshold" ]]; then
           continue
         fi
@@ -124,7 +124,6 @@ for gen_length in "${GEN_LENGTHS[@]}"; do
           elif [[ "${mode_name}" == "focus_dual_cache" ]]; then
             model_path="${FOCUS_DECODE_MODEL_PATH}"
             if [[ "${alg}" == "confidence_threshold" ]]; then
-              # gamma 扫描只对 focus_decode + confidence_threshold 生效
               for gamma in "${GAMMAS[@]}"; do
                 run_case "${mode_name}" "${gen_length}" "${steps}" "${block_length}" "${model_path}" "${alg}" "${threshold}" "${gamma}"
               done
