@@ -1,10 +1,10 @@
 import argparse
 import json
+import logging
 import os
 import re
+import signal
 import time
-from decimal import Decimal, InvalidOperation
-from fractions import Fraction
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +14,96 @@ from transformers import AutoModel, AutoTokenizer
 
 os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+eval_logger = logging.getLogger(__name__)
+
+try:
+    import sympy
+    from sympy.parsing.latex import parse_latex
+
+    HAS_LATEX_EQUIV = True
+except Exception:
+    sympy = None
+    parse_latex = None
+    HAS_LATEX_EQUIV = False
+
+
+OFFICIAL_MINERVA_FEWSHOT = [
+    {
+        "problem": "Find the domain of the expression  $\\frac{\\sqrt{x-2}}{\\sqrt{5-x}}$.}",
+        "solution": "The expressions inside each square root must be non-negative. Therefore, $x-2 \\ge 0$, so $x\\ge2$, and $5 - x \\ge 0$, so $x \\le 5$. Also, the denominator cannot be equal to zero, so $5-x>0$, which gives $x<5$. Therefore, the domain of the expression is $\\boxed{[2,5)}$.\nFinal Answer: The final answer is $[2,5)$. I hope it is correct.",
+    },
+    {
+        "problem": "If $\\det \\mathbf{A} = 2$ and $\\det \\mathbf{B} = 12,$ then find $\\det (\\mathbf{A} \\mathbf{B}).$",
+        "solution": "We have that $\\det (\\mathbf{A} \\mathbf{B}) = (\\det \\mathbf{A})(\\det \\mathbf{B}) = (2)(12) = \\boxed{24}.$\nFinal Answer: The final answer is $24$. I hope it is correct.",
+    },
+    {
+        "problem": "Terrell usually lifts two 20-pound weights 12 times. If he uses two 15-pound weights instead, how many times must Terrell lift them in order to lift the same total weight?",
+        "solution": "If Terrell lifts two 20-pound weights 12 times, he lifts a total of $2\\cdot 12\\cdot20=480$ pounds of weight.  If he lifts two 15-pound weights instead for $n$ times, he will lift a total of $2\\cdot15\\cdot n=30n$ pounds of weight.  Equating this to 480 pounds, we can solve for $n$:\n\\begin{align*}\n30n&=480\\\\\n\\Rightarrow\\qquad n&=480/30=\\boxed{16}\n\\end{align*}\nFinal Answer: The final answer is $16$. I hope it is correct.",
+    },
+    {
+        "problem": "If the system of equations\n\n\\begin{align*}\n6x-4y&=a,\\\\\n6y-9x &=b.\n\\end{align*}has a solution $(x, y)$ where $x$ and $y$ are both nonzero,\nfind $\\frac{a}{b},$ assuming $b$ is nonzero.",
+        "solution": "If we multiply the first equation by $-\\frac{3}{2}$, we obtain\n\n$$6y-9x=-\\frac{3}{2}a.$$Since we also know that $6y-9x=b$, we have\n\n$$-\\frac{3}{2}a=b\\Rightarrow\\frac{a}{b}=\\boxed{-\\frac{2}{3}}.$$\nFinal Answer: The final answer is $-\\frac{2}{3}$. I hope it is correct.",
+    },
+]
+
+SUBSTITUTIONS = [
+    ("an ", ""),
+    ("a ", ""),
+    (".$", "$"),
+    ("\\$", ""),
+    (r"\ ", ""),
+    (" ", ""),
+    ("mbox", "text"),
+    (",\\text{and}", ","),
+    ("\\text{and}", ","),
+    ("\\text{m}", "\\text{}"),
+]
+
+REMOVED_EXPRESSIONS = [
+    "square",
+    "ways",
+    "integers",
+    "dollars",
+    "mph",
+    "inches",
+    "ft",
+    "hours",
+    "km",
+    "units",
+    "\\ldots",
+    "sue",
+    "points",
+    "feet",
+    "minutes",
+    "digits",
+    "cents",
+    "degrees",
+    "cm",
+    "gm",
+    "pounds",
+    "meters",
+    "meals",
+    "edges",
+    "students",
+    "childrentickets",
+    "multiples",
+    "\\text{s}",
+    "\\text{.}",
+    "\\text{\ns}",
+    "\\text{}^2",
+    "\\text{}^3",
+    "\\text{\n}",
+    "\\text{}",
+    r"\mathrm{th}",
+    r"^\circ",
+    r"^{\circ}",
+    r"\;",
+    r",\!",
+    "{,}",
+    '"',
+    "\\dots",
+]
 
 
 def parse_args():
@@ -52,6 +142,19 @@ def parse_args():
     parser.add_argument("--focus_topk", type=int, default=8)
     parser.add_argument("--output_path", type=str, default="math_results.jsonl")
     parser.add_argument("--stats_path", type=str, default="math_stats.json")
+    parser.add_argument(
+        "--prompt_style",
+        type=str,
+        choices=("official", "legacy"),
+        default="official",
+        help="Use the official Minerva-style 4-shot prompt by default.",
+    )
+    parser.add_argument(
+        "--use_chat_template",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Wrap prompts with the tokenizer chat template. Disabled by default to match lm-eval.",
+    )
     return parser.parse_args()
 
 
@@ -107,7 +210,7 @@ def load_math_split(args, split_name: str):
             if subset is not None:
                 kwargs["name"] = subset
             return load_dataset(**kwargs)
-        except Exception as exc:  # pragma: no cover - best effort fallback chain
+        except Exception as exc:  # pragma: no cover
             errors.append(f"{name}[{split_name}]: {exc}")
     joined = "\n".join(errors)
     raise RuntimeError(
@@ -149,111 +252,256 @@ def normalize_example(example: Dict[str, Any], fallback_id: int) -> Dict[str, An
     }
 
 
-def extract_last_boxed(text: str) -> Optional[str]:
-    start = text.rfind("\\boxed{")
-    token = "\\boxed{"
-    if start == -1:
-        start = text.rfind("\\fbox{")
-        token = "\\fbox{"
-    if start == -1:
+def doc_to_text(problem: str) -> str:
+    return "Problem:\n" + problem.strip() + "\n\nSolution:"
+
+
+def last_boxed_only_string(string: str) -> Optional[str]:
+    idx = string.rfind("\\boxed")
+    if "\\boxed " in string:
+        return "\\boxed " + string.split("\\boxed ")[-1].split("$")[0]
+    if idx < 0:
+        idx = string.rfind("\\fbox")
+        if idx < 0:
+            return None
+
+    i = idx
+    right_brace_idx = None
+    num_left_braces_open = 0
+    while i < len(string):
+        if string[i] == "{":
+            num_left_braces_open += 1
+        if string[i] == "}":
+            num_left_braces_open -= 1
+            if num_left_braces_open == 0:
+                right_brace_idx = i
+                break
+        i += 1
+
+    if right_brace_idx is None:
         return None
-
-    depth = 1
-    current = start + len(token)
-    pieces: List[str] = []
-    while current < len(text):
-        char = text[current]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return "".join(pieces).strip()
-        pieces.append(char)
-        current += 1
-    return None
+    return string[idx : right_brace_idx + 1]
 
 
-def strip_outer_braces(text: str) -> str:
-    while text.startswith("{") and text.endswith("}"):
-        depth = 0
-        balanced = True
-        for idx, char in enumerate(text):
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0 and idx != len(text) - 1:
-                    balanced = False
-                    break
-        if not balanced or depth != 0:
-            break
-        text = text[1:-1].strip()
-    return text
-
-
-def normalize_number(text: str) -> Optional[str]:
-    candidate = text.strip().replace(",", "")
-    try:
-        if "/" in candidate and re.fullmatch(r"[-+]?\d+\s*/\s*[-+]?\d+", candidate):
-            frac = Fraction(candidate.replace(" ", ""))
-            return str(frac.numerator) if frac.denominator == 1 else f"{frac.numerator}/{frac.denominator}"
-        value = Decimal(candidate)
-    except (InvalidOperation, ZeroDivisionError, ValueError):
+def remove_boxed(s: Optional[str]) -> Optional[str]:
+    if s is None:
         return None
-    if value == value.to_integral():
-        return str(int(value))
-    return format(value.normalize(), "f").rstrip("0").rstrip(".")
+    if "\\boxed " in s:
+        left = "\\boxed "
+        if s.startswith(left):
+            return s[len(left) :]
+        return s
+
+    left = "\\boxed{"
+    if s.startswith(left) and s.endswith("}"):
+        return s[len(left) : -1]
+    return s
 
 
-def normalize_math_answer(text: Optional[str]) -> Optional[str]:
-    if text is None:
-        return None
+def get_unnormalized_answer(text: str) -> Optional[str]:
+    match = re.search(
+        r"Final Answer: The final answer is(.*?)(?:\. I hope it is correct\.|$)",
+        text,
+        flags=re.DOTALL,
+    )
+    if match:
+        return match.group(1).strip()
 
-    cleaned = text.strip()
-    if not cleaned:
-        return None
-    cleaned = cleaned.strip("$")
-    cleaned = cleaned.replace("\\left", "").replace("\\right", "")
-    cleaned = cleaned.replace("\\!", "").replace("\\,", "")
-    cleaned = cleaned.replace("\\tfrac", "\\frac").replace("\\dfrac", "\\frac")
-    cleaned = cleaned.replace(" ", "")
-    cleaned = cleaned.rstrip(".")
-    cleaned = strip_outer_braces(cleaned)
-    cleaned = cleaned.replace("{,}", ",")
-
-    numeric = normalize_number(cleaned)
-    if numeric is not None:
-        return numeric
-    return cleaned or None
-
-
-def extract_prediction(text: str) -> Optional[str]:
-    boxed = extract_last_boxed(text)
+    boxed = remove_boxed(last_boxed_only_string(text))
     if boxed is not None:
-        normalized = normalize_math_answer(boxed)
-        if normalized is not None:
-            return normalized
-
-    hash_match = re.search(r"####\s*(.+)", text)
-    if hash_match:
-        normalized = normalize_math_answer(hash_match.group(1))
-        if normalized is not None:
-            return normalized
-
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if lines:
-        normalized = normalize_math_answer(lines[-1])
-        if normalized is not None:
-            return normalized
-
-    matches = re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?(?:/\d+)?", text)
-    if matches:
-        return normalize_math_answer(matches[-1])
+        return boxed.strip()
     return None
 
 
-def extract_reference(example: Dict[str, Any]) -> Optional[str]:
+def normalize_final_answer(final_answer: Optional[str]) -> Optional[str]:
+    if final_answer is None:
+        return None
+
+    final_answer = final_answer.strip()
+    if not final_answer:
+        return None
+
+    final_answer = final_answer.split("=")[-1]
+
+    for before, after in SUBSTITUTIONS:
+        final_answer = final_answer.replace(before, after)
+    for expr in REMOVED_EXPRESSIONS:
+        final_answer = final_answer.replace(expr, "")
+
+    final_answer = re.sub(r"(.*?)(\$)(.*?)(\$)(.*)", "$\\3$", final_answer)
+    final_answer = re.sub(r"(\\text\{)(.*?)(\})", "\\2", final_answer)
+    final_answer = re.sub(r"(\\textbf\{)(.*?)(\})", "\\2", final_answer)
+    final_answer = re.sub(r"(\\overline\{)(.*?)(\})", "\\2", final_answer)
+    final_answer = re.sub(r"(\\boxed\{)(.*)(\})", "\\2", final_answer)
+    final_answer = re.sub(r"(frac)([^{])(.)", "frac{\\2}{\\3}", final_answer)
+    final_answer = re.sub(r"(sqrt)([^{])", "sqrt{\\2}", final_answer)
+    final_answer = final_answer.replace("$", "")
+
+    if final_answer.replace(",", "").isdigit():
+        final_answer = final_answer.replace(",", "")
+
+    final_answer = final_answer.strip()
+    return final_answer or None
+
+
+def fix_fracs(string: str) -> str:
+    substrs = string.split("\\frac")
+    new_str = substrs[0]
+    if len(substrs) > 1:
+        substrs = substrs[1:]
+        for substr in substrs:
+            new_str += "\\frac"
+            if not substr:
+                return string
+            if substr[0] == "{":
+                new_str += substr
+            else:
+                if len(substr) < 2:
+                    return string
+                a = substr[0]
+                b = substr[1]
+                if b != "{":
+                    post_substr = substr[2:] if len(substr) > 2 else ""
+                    new_str += "{" + a + "}{" + b + "}" + post_substr
+                else:
+                    post_substr = substr[2:] if len(substr) > 2 else ""
+                    new_str += "{" + a + "}" + b + post_substr
+    return new_str
+
+
+def fix_a_slash_b(string: str) -> str:
+    if len(string.split("/")) != 2:
+        return string
+    a = string.split("/")[0]
+    b = string.split("/")[1]
+    try:
+        a_int = int(a)
+        b_int = int(b)
+        if string != f"{a_int}/{b_int}":
+            return string
+        return "\\frac{" + str(a_int) + "}{" + str(b_int) + "}"
+    except Exception:
+        return string
+
+
+def remove_right_units(string: str) -> str:
+    if "\\text{ " in string:
+        splits = string.split("\\text{ ")
+        if len(splits) == 2:
+            return splits[0]
+    return string
+
+
+def fix_sqrt(string: str) -> str:
+    if "\\sqrt" not in string:
+        return string
+    splits = string.split("\\sqrt")
+    new_string = splits[0]
+    for split in splits[1:]:
+        if split and split[0] != "{":
+            new_substr = "\\sqrt{" + split[0] + "}" + split[1:]
+        else:
+            new_substr = "\\sqrt" + split
+        new_string += new_substr
+    return new_string
+
+
+def strip_string(string: Optional[str]) -> Optional[str]:
+    if string is None:
+        return None
+
+    string = string.replace("\n", "")
+    string = string.replace("\\!", "")
+    string = string.replace("\\\\", "\\")
+    string = string.replace("tfrac", "frac")
+    string = string.replace("dfrac", "frac")
+    string = string.replace("\\left", "")
+    string = string.replace("\\right", "")
+    string = string.replace("^{\\circ}", "")
+    string = string.replace("^\\circ", "")
+    string = string.replace("\\$", "")
+    string = remove_right_units(string)
+    string = string.replace("\\%", "")
+    string = string.replace("%", "")
+    string = string.replace(" .", " 0.")
+    string = string.replace("{.", "{0.")
+
+    if len(string) == 0:
+        return string
+    if string[0] == ".":
+        string = "0" + string
+
+    if len(string.split("=")) == 2 and len(string.split("=")[0]) <= 2:
+        string = string.split("=")[1]
+
+    string = fix_sqrt(string)
+    string = string.replace(" ", "")
+    string = fix_fracs(string)
+
+    if string == "0.5":
+        string = "\\frac{1}{2}"
+
+    string = fix_a_slash_b(string)
+    return string
+
+
+class timeout:
+    def __init__(self, seconds=5, error_message="Timeout"):
+        self.seconds = seconds
+        self.error_message = error_message
+
+    def handle_timeout(self, signum, frame):
+        raise TimeoutError(self.error_message)
+
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, self.handle_timeout)
+        signal.alarm(self.seconds)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        signal.alarm(0)
+
+
+def is_equiv(pred: Optional[str], gold: Optional[str]) -> bool:
+    if pred is None or gold is None:
+        return pred is None and gold is None
+
+    pred_norm = normalize_final_answer(pred)
+    gold_norm = normalize_final_answer(gold)
+    if pred_norm is None or gold_norm is None:
+        return pred_norm == gold_norm
+
+    pred_stripped = strip_string(pred_norm)
+    gold_stripped = strip_string(gold_norm)
+    if pred_stripped == gold_stripped:
+        return True
+
+    if not HAS_LATEX_EQUIV:
+        return False
+
+    try:
+        with timeout(seconds=5):
+            parsed_pred = parse_latex(pred_norm)
+            parsed_gold = parse_latex(gold_norm)
+            diff = parsed_pred - parsed_gold
+            return bool(sympy.simplify(diff) == 0)
+    except Exception as exc:
+        eval_logger.debug("latex equivalence failed for %s vs %s: %s", pred_norm, gold_norm, exc)
+        return False
+
+
+def extract_prediction(text: str, prompt_style: str) -> Optional[str]:
+    text = truncate_generation(text)
+
+    if prompt_style == "official":
+        return normalize_final_answer(get_unnormalized_answer(text))
+
+    boxed = remove_boxed(last_boxed_only_string(text))
+    if boxed is not None:
+        return normalize_final_answer(boxed)
+    return normalize_final_answer(text.splitlines()[-1] if text.splitlines() else text)
+
+
+def extract_reference(example: Dict[str, Any], prompt_style: str) -> Optional[str]:
     explicit = (
         example.get("answer")
         or example.get("final_answer")
@@ -261,17 +509,46 @@ def extract_reference(example: Dict[str, Any]) -> Optional[str]:
         or example.get("label")
     )
     if explicit:
-        normalized = normalize_math_answer(str(explicit))
-        if normalized is not None:
-            return normalized
+        return normalize_final_answer(str(explicit))
 
-    solution = example.get("solution") or example.get("answer") or ""
-    return extract_prediction(str(solution))
+    solution = str(example.get("solution") or example.get("answer") or "")
+    if prompt_style == "official":
+        return normalize_final_answer(remove_boxed(last_boxed_only_string(solution)))
+
+    boxed = remove_boxed(last_boxed_only_string(solution))
+    if boxed is not None:
+        return normalize_final_answer(boxed)
+    return normalize_final_answer(solution)
 
 
-def build_few_shot_prefix(examples: List[Dict[str, Any]]) -> str:
+def select_few_shot_examples(args, normalized_train_examples: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if args.n_shot <= 0:
+        return []
+
+    if args.prompt_style == "official":
+        shot_count = min(args.n_shot, len(OFFICIAL_MINERVA_FEWSHOT))
+        return [
+            {
+                "task_id": f"official_{idx}",
+                "problem": shot["problem"].strip(),
+                "solution": shot["solution"].strip(),
+                "raw": shot,
+            }
+            for idx, shot in enumerate(OFFICIAL_MINERVA_FEWSHOT[:shot_count], start=1)
+        ]
+
+    shot_count = min(args.n_shot, len(normalized_train_examples))
+    return normalized_train_examples[:shot_count]
+
+
+def build_few_shot_prefix(examples: List[Dict[str, Any]], prompt_style: str) -> str:
     if not examples:
         return ""
+
+    if prompt_style == "official":
+        return "\n\n".join(
+            doc_to_text(example["problem"]) + example["solution"] for example in examples
+        )
 
     parts = [
         "Solve the following competition math problems carefully. "
@@ -281,30 +558,63 @@ def build_few_shot_prefix(examples: List[Dict[str, Any]]) -> str:
         parts.append(f"Example {idx}:\n")
         parts.append(f"Problem: {example['problem']}\n\n")
         parts.append(f"Solution: {example['solution']}\n\n")
-    return "".join(parts)
+    return "".join(parts).rstrip()
 
 
-def build_messages(problem: str, few_shot_prefix: str = ""):
+def build_prompt(problem: str, few_shot_prefix: str, prompt_style: str) -> str:
+    if prompt_style == "official":
+        prompt = doc_to_text(problem)
+        if few_shot_prefix:
+            return few_shot_prefix + "\n\n" + prompt
+        return prompt
+
     prompt = few_shot_prefix
     if few_shot_prefix:
-        prompt += "Now solve the next problem.\n\n"
+        prompt += "\n\nNow solve the next problem.\n\n"
     prompt += (
         f"Problem: {problem.strip()}\n\n"
         "Solution: Please reason step by step and end with the final answer in \\boxed{}."
     )
-    return [{"role": "user", "content": prompt}]
+    return prompt
+
+
+def tokenize_prompts(tokenizer, prompts: List[str], use_chat_template: bool):
+    if use_chat_template:
+        messages = [[{"role": "user", "content": prompt}] for prompt in prompts]
+        return tokenizer.apply_chat_template(
+            messages,
+            return_tensors="pt",
+            return_dict=True,
+            add_generation_prompt=True,
+            padding=True,
+        )
+    return tokenizer(
+        prompts,
+        return_tensors="pt",
+        return_attention_mask=True,
+        padding=True,
+    )
+
+
+def truncate_generation(text: str) -> str:
+    stop_markers = [
+        "\nProblem:",
+        "\n\nProblem:",
+        "<|im_end|>",
+    ]
+    cutoffs = [text.find(marker) for marker in stop_markers if text.find(marker) != -1]
+    if cutoffs:
+        text = text[: min(cutoffs)]
+    return text.strip()
 
 
 @torch.no_grad()
 def generate_batch(model, tokenizer, batch_examples, few_shot_prefix, device, args):
-    messages = [build_messages(example["problem"], few_shot_prefix) for example in batch_examples]
-    inputs = tokenizer.apply_chat_template(
-        messages,
-        return_tensors="pt",
-        return_dict=True,
-        add_generation_prompt=True,
-        padding=True,
-    )
+    prompts = [
+        build_prompt(example["problem"], few_shot_prefix, args.prompt_style)
+        for example in batch_examples
+    ]
+    inputs = tokenize_prompts(tokenizer, prompts, args.use_chat_template)
     input_ids = inputs.input_ids.to(device)
     attention_mask = inputs.attention_mask.to(device)
     prompt_lengths = attention_mask.sum(dim=1).tolist()
@@ -338,7 +648,7 @@ def generate_batch(model, tokenizer, batch_examples, few_shot_prefix, device, ar
         text = tokenizer.decode(gen_ids, skip_special_tokens=False)
         if tokenizer.eos_token:
             text = text.split(tokenizer.eos_token)[0]
-        responses.append(text.strip())
+        responses.append(truncate_generation(text))
         generated_tokens.append(sum(1 for token_id in gen_ids if int(token_id) != mask_token_id))
     return responses, generated_tokens
 
@@ -372,6 +682,8 @@ def build_stats(
         "split": args.split,
         "fewshot_split": args.fewshot_split,
         "n_shot": len(few_shot_examples),
+        "prompt_style": args.prompt_style,
+        "use_chat_template": bool(args.use_chat_template),
         "max_new_tokens": args.max_new_tokens,
         "steps": args.steps,
         "block_length": args.block_length,
@@ -430,7 +742,9 @@ def main():
         f"dual_cache={args.dual_cache}, "
         f"focus_decode={args.focus_decode}, "
         f"focus_layer={args.focus_layer}, "
-        f"focus_topk={args.focus_topk}",
+        f"focus_topk={args.focus_topk}, "
+        f"prompt_style={args.prompt_style}, "
+        f"use_chat_template={args.use_chat_template}",
         flush=True,
     )
 
@@ -448,12 +762,14 @@ def main():
     dataset = load_math_split(args, args.split)
     normalized_dataset = [normalize_example(dataset[i], i) for i in range(len(dataset))]
 
-    few_shot_examples = []
-    if args.n_shot > 0:
+    normalized_fewshot_dataset: List[Dict[str, Any]] = []
+    if args.n_shot > 0 and args.prompt_style != "official":
         few_shot_dataset = load_math_split(args, args.fewshot_split)
-        shot_count = min(args.n_shot, len(few_shot_dataset))
-        few_shot_examples = [normalize_example(few_shot_dataset[i], i) for i in range(shot_count)]
-    few_shot_prefix = build_few_shot_prefix(few_shot_examples)
+        normalized_fewshot_dataset = [
+            normalize_example(few_shot_dataset[i], i) for i in range(len(few_shot_dataset))
+        ]
+    few_shot_examples = select_few_shot_examples(args, normalized_fewshot_dataset)
+    few_shot_prefix = build_few_shot_prefix(few_shot_examples, args.prompt_style)
 
     total_len = len(normalized_dataset)
     start = max(args.start, 0)
@@ -511,9 +827,9 @@ def main():
             for example, prediction, sample_generated_tokens in zip(
                 batch_examples, predictions, generated_tokens
             ):
-                gold = extract_reference(example["raw"])
-                pred = extract_prediction(prediction)
-                is_correct = pred is not None and pred == gold
+                gold = extract_reference(example["raw"], args.prompt_style)
+                pred = extract_prediction(prediction, args.prompt_style)
+                is_correct = is_equiv(pred, gold)
 
                 total += 1
                 correct += int(is_correct)

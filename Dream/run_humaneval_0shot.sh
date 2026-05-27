@@ -4,7 +4,7 @@ set -euo pipefail
 PYTHON_BIN=python
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/eval_humaneval.py"
-FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Softmax}"
+FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-OptSliding}"
 FASTDLLM_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm"
 BASELINE_MODEL_PATH="${SCRIPT_DIR}/models/Dream-v0-Base-7B"
 DATASET_PATH="data/HumanEval.jsonl.gz"

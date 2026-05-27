@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/eval_mbpp.py"
 BASELINE_MODEL_PATH="${BASELINE_MODEL_PATH:-${MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B}}"
 FASTDLLM_MODEL_PATH="${FASTDLLM_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Fastdllm}"
-FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-Softmax}"
+FOCUS_DECODE_MODEL_PATH="${FOCUS_DECODE_MODEL_PATH:-${SCRIPT_DIR}/models/Dream-v0-Base-7B-OptSliding}"
 DATASET_PATH="${DATASET_PATH:-${SCRIPT_DIR}/data/mbpp}"
 SPLIT="${SPLIT:-test}"
 FEWSHOT_SPLIT="${FEWSHOT_SPLIT:-prompt}"
@@ -15,13 +15,15 @@ START_INDEX="${START_INDEX:-0}"
 END_INDEX="${END_INDEX:-}"
 OUTPUT_RUN_NAME="${OUTPUT_RUN_NAME:-$(date +%Y%m%d_%H%M%S)}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${SCRIPT_DIR}/mbpp_sweeps/${OUTPUT_RUN_NAME}}"
+PROMPT_STYLE="${PROMPT_STYLE:-official}"
+INCLUDE_CHALLENGE_TESTS="${INCLUDE_CHALLENGE_TESTS:-false}"
 
 THRESHOLDS=(0.9)
 GAMMAS=(0.1)
 GEN_LENGTHS=(256 512)
 BLOCK_LENGTHS=(32)
 N_SHOTS=(3)
-MODES=(baseline fast_dllm_dual_cache focus_decode)
+MODES=(focus_decode fast_dllm_dual_cache)
 FOCUS_LAYERS=("${FOCUS_LAYER:-3}")
 FOCUS_TOPKS=("${FOCUS_TOPK:-16}")
 
@@ -129,11 +131,18 @@ run_case() {
     --block_length "${block_length}"
     --output_path "${run_dir}/mbpp_results.jsonl"
     --stats_path "${run_dir}/mbpp_stats.json"
+    --prompt_style "${PROMPT_STYLE}"
     --confirm_run_unsafe_code
     --add_bos_token
-    --escape_until
+    --no-escape_until
     "${mode_args[@]}"
   )
+
+  if [[ "${INCLUDE_CHALLENGE_TESTS}" == "true" ]]; then
+    cmd+=(--include_challenge_tests)
+  else
+    cmd+=(--no-include_challenge_tests)
+  fi
 
   if [[ -n "${DATASET_PATH}" ]]; then
     cmd+=(--dataset_path "${DATASET_PATH}")

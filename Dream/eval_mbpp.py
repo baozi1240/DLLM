@@ -9,13 +9,58 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("HF_EVALUATE_CACHE", "/tmp/hf_evaluate")
+os.environ.setdefault("HF_METRICS_CACHE", "/tmp/hf_metrics")
+
 import evaluate as hf_evaluate
 import torch
 from datasets import load_dataset, load_from_disk
 from transformers import AutoModel, AutoTokenizer
 
-os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+OFFICIAL_MBPP_FEWSHOT = [
+    {
+        "task_id": "2",
+        "text": "Write a function to find the similar elements from the given two tuple lists.",
+        "code": "def similar_elements(test_tup1, test_tup2):\n  res = tuple(set(test_tup1) & set(test_tup2))\n  return (res)",
+        "test_list": [
+            "assert similar_elements((3, 4, 5, 6),(5, 7, 4, 10)) == (4, 5)",
+            "assert similar_elements((1, 2, 3, 4),(5, 4, 3, 7)) == (3, 4)",
+            "assert similar_elements((11, 12, 14, 13),(17, 15, 14, 13)) == (13, 14)",
+        ],
+        "test_setup_code": "",
+        "challenge_test_list": [],
+        "raw": {},
+    },
+    {
+        "task_id": "3",
+        "text": "Write a python function to identify non-prime numbers.",
+        "code": "import math\ndef is_not_prime(n):\n    result = False\n    for i in range(2, int(math.sqrt(n)) + 1):\n        if n % i == 0:\n            result = True\n    return result",
+        "test_list": [
+            "assert is_not_prime(2) == False",
+            "assert is_not_prime(10) == True",
+            "assert is_not_prime(35) == True",
+        ],
+        "test_setup_code": "",
+        "challenge_test_list": [],
+        "raw": {},
+    },
+    {
+        "task_id": "4",
+        "text": "Write a function to find the largest integers from a given list of numbers using heap queue algorithm.",
+        "code": "import heapq as hq\ndef heap_queue_largest(nums, n):\n  largest_nums = hq.nlargest(n, nums)\n  return largest_nums",
+        "test_list": [
+            "assert heap_queue_largest( [25, 35, 22, 85, 14, 65, 75, 22, 58],3)==[85, 75, 65] ",
+            "assert heap_queue_largest( [25, 35, 22, 85, 14, 65, 75, 22, 58],2)==[85, 75] ",
+            "assert heap_queue_largest( [25, 35, 22, 85, 14, 65, 75, 22, 58],5)==[85, 75, 65, 58, 35]",
+        ],
+        "test_setup_code": "",
+        "challenge_test_list": [],
+        "raw": {},
+    },
+]
 
 
 def refine_text(text: str) -> str:
@@ -170,6 +215,19 @@ def parse_args():
     parser.add_argument("--output_path", type=str, default="mbpp_results.jsonl")
     parser.add_argument("--stats_path", type=str, default="mbpp_stats.json")
     parser.add_argument(
+        "--prompt_style",
+        type=str,
+        choices=("official", "legacy"),
+        default="official",
+        help="Use the official lm-eval MBPP prompt/few-shot protocol by default.",
+    )
+    parser.add_argument(
+        "--include_challenge_tests",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Include challenge_test_list in evaluation. Disabled by default to match official MBPP.",
+    )
+    parser.add_argument(
         "--confirm_run_unsafe_code",
         action="store_true",
         help="Required because MBPP evaluation executes model-generated Python.",
@@ -316,9 +374,31 @@ def normalize_example(example: Dict[str, Any], fallback_id: int) -> Dict[str, An
     }
 
 
-def build_few_shot_prefix(examples: List[Dict[str, Any]]) -> str:
+def get_primary_tests(example: Dict[str, Any]) -> List[str]:
+    return example["test_list"][:3]
+
+
+def format_official_prompt(example: Dict[str, Any]) -> str:
+    tests = get_primary_tests(example)
+    prompt = (
+        "You are an expert Python programmer, and here is your task: "
+        f"{example['text']} Your code should pass these tests:\n\n"
+    )
+    if tests:
+        prompt += "\n".join(tests)
+    prompt += "\n[BEGIN]\n"
+    return prompt
+
+
+def build_few_shot_prefix(examples: List[Dict[str, Any]], prompt_style: str) -> str:
     if not examples:
         return ""
+
+    if prompt_style == "official":
+        return "".join(
+            format_official_prompt(example) + example["code"].rstrip() + "\n[DONE]\n"
+            for example in examples
+        )
 
     parts = ["Write Python code that solves each task. Return only valid Python code.\n\n"]
     for idx, example in enumerate(examples, start=1):
@@ -334,7 +414,10 @@ def build_few_shot_prefix(examples: List[Dict[str, Any]]) -> str:
     return "".join(parts)
 
 
-def build_prompt(example: Dict[str, Any], few_shot_prefix: str) -> str:
+def build_prompt(example: Dict[str, Any], few_shot_prefix: str, prompt_style: str) -> str:
+    if prompt_style == "official":
+        return few_shot_prefix + format_official_prompt(example)
+
     prompt = few_shot_prefix
     if few_shot_prefix:
         prompt += "Now solve the next task.\n\n"
@@ -354,8 +437,15 @@ def build_inputs(tokenizer, prompt, device, add_bos_token):
     return encoded.input_ids.to(device), encoded.attention_mask.to(device)
 
 
-def trim_completion_text(text: str) -> str:
+def trim_completion_text(text: str, prompt_style: str) -> str:
     text = text.replace("\r\n", "\n").strip()
+    if prompt_style == "official":
+        if "[DONE]" in text:
+            text = text.split("[DONE]", 1)[0]
+        if "[BEGIN]" in text:
+            text = text.split("[BEGIN]", 1)[-1]
+        return text.strip()
+
     text = re.sub(r"^```(?:python)?\s*", "", text)
     stop_patterns = [
         r"\n```",
@@ -380,17 +470,24 @@ def extract_fastdllm_code_block(text: str) -> str:
 
 
 def postprocess_completion(raw_generation: str, args) -> Tuple[str, str, str]:
-    processed_generation = raw_generation if args.escape_until else trim_completion_text(raw_generation)
+    if args.prompt_style == "official":
+        processed_generation = trim_completion_text(raw_generation, args.prompt_style)
+        completion = processed_generation.strip()
+        return completion, "", processed_generation
+
+    processed_generation = (
+        raw_generation if args.escape_until else trim_completion_text(raw_generation, args.prompt_style)
+    )
     extracted_code = extract_fastdllm_code_block(processed_generation)
     candidate = extracted_code if extracted_code.strip() else processed_generation
     completion = fastdllm_sanitize(candidate)
     if not completion.strip():
-        completion = trim_completion_text(candidate)
+        completion = trim_completion_text(candidate, args.prompt_style)
     return completion, extracted_code, processed_generation
 
 
 def generate_completion(model, tokenizer, example, few_shot_prefix, args, device):
-    prompt = build_prompt(example, few_shot_prefix)
+    prompt = build_prompt(example, few_shot_prefix, args.prompt_style)
     input_ids, attention_mask = build_inputs(
         tokenizer=tokenizer,
         prompt=prompt,
@@ -439,7 +536,19 @@ def build_reference(example: Dict[str, Any]) -> str:
     parts = []
     if example["test_setup_code"]:
         parts.append(example["test_setup_code"].rstrip())
-    all_tests = example["test_list"][:]
+    all_tests = get_primary_tests(example)
+    parts.extend(test.rstrip() for test in all_tests if test.strip())
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def build_reference_with_options(example: Dict[str, Any], include_challenge_tests: bool) -> str:
+    if not include_challenge_tests:
+        return build_reference(example)
+
+    parts = []
+    if example["test_setup_code"]:
+        parts.append(example["test_setup_code"].rstrip())
+    all_tests = get_primary_tests(example)[:]
     for test in example["challenge_test_list"]:
         if test not in all_tests:
             all_tests.append(test)
@@ -478,6 +587,7 @@ def require_unsafe_code_confirmation(args):
 
 
 def save_json(path: Path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
@@ -511,6 +621,8 @@ def build_stats(
         "split": args.split,
         "fewshot_split": args.fewshot_split,
         "n_shot": len(few_shot_examples),
+        "prompt_style": args.prompt_style,
+        "include_challenge_tests": bool(args.include_challenge_tests),
         "mode": resolve_mode_name(args),
         "num_problems": len(examples),
         "completed": completed,
@@ -550,6 +662,14 @@ def build_stats(
     }
 
 
+def select_few_shot_examples(args, normalized_fewshot_examples: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if args.n_shot <= 0:
+        return []
+    if args.prompt_style == "official":
+        return OFFICIAL_MBPP_FEWSHOT[: min(args.n_shot, len(OFFICIAL_MBPP_FEWSHOT))]
+    return normalized_fewshot_examples[: min(args.n_shot, len(normalized_fewshot_examples))]
+
+
 def main():
     args = parse_args()
     require_unsafe_code_confirmation(args)
@@ -579,7 +699,9 @@ def main():
         f"dual_cache={args.dual_cache}, "
         f"focus_decode={args.focus_decode}, "
         f"focus_layer={args.focus_layer}, "
-        f"focus_topk={args.focus_topk}",
+        f"focus_topk={args.focus_topk}, "
+        f"prompt_style={args.prompt_style}, "
+        f"include_challenge_tests={args.include_challenge_tests}",
         flush=True,
     )
 
@@ -591,12 +713,12 @@ def main():
     dataset = load_mbpp_split(args, args.split)
     examples = [normalize_example(dataset[i], i) for i in range(len(dataset))]
 
-    few_shot_examples = []
-    if args.n_shot > 0:
+    normalized_fewshot_examples = []
+    if args.n_shot > 0 and args.prompt_style != "official":
         few_shot_dataset = load_mbpp_split(args, args.fewshot_split)
-        shot_count = min(args.n_shot, len(few_shot_dataset))
-        few_shot_examples = [normalize_example(few_shot_dataset[i], i) for i in range(shot_count)]
-    few_shot_prefix = build_few_shot_prefix(few_shot_examples)
+        normalized_fewshot_examples = [normalize_example(few_shot_dataset[i], i) for i in range(len(few_shot_dataset))]
+    few_shot_examples = select_few_shot_examples(args, normalized_fewshot_examples)
+    few_shot_prefix = build_few_shot_prefix(few_shot_examples, args.prompt_style)
 
     total_len = len(examples)
     start = max(args.start, 0)
@@ -608,8 +730,8 @@ def main():
     print(f"Evaluating {len(eval_examples)} samples from mbpp[{args.split}]", flush=True)
     print(f"n_shot: {len(few_shot_examples)}", flush=True)
 
-    output_path = Path(args.output_path)
-    stats_path = Path(args.stats_path)
+    output_path = Path(args.output_path).expanduser().resolve()
+    stats_path = Path(args.stats_path).expanduser().resolve()
     if output_path.parent != Path("."):
         output_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_path.parent != Path("."):
@@ -646,7 +768,7 @@ def main():
             pass_at_1, ok, detail = evaluate_problem(
                 metric=metric,
                 completion=completion,
-                reference=build_reference(example),
+                reference=build_reference_with_options(example, args.include_challenge_tests),
                 args=args,
             )
             eval_time = time.perf_counter() - eval_start

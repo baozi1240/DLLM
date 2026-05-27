@@ -21,7 +21,7 @@ GAMMAS=(0.1)
 GEN_LENGTHS=(256 512)
 BLOCK_LENGTHS=(32)
 N_SHOTS=(4)
-MODES=(baseline fast_dllm_dual_cache focus_decode)
+MODES=(focus_decode fast_dllm_dual_cache)
 FOCUS_LAYERS=("${FOCUS_LAYER:-3}")
 FOCUS_TOPKS=("${FOCUS_TOPK:-16}")
 
